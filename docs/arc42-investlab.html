@@ -1,0 +1,1280 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>InvestLab - Documentação de Arquitetura (Arc42) - Entrega 2</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+// Desenhador de diagramas em SVG com posições fixas (grade), usado nas figuras C4 e de componentes.
+// spec: { W, H, nos:{id:{x,y,w,h,t,s,k,forma}}, grupos:[{x,y,w,h,t,id}], arestas:[{de,para,a,b,l,d,f,dy}], legenda:[...] }
+function desenharDiagrama(alvo, spec) {
+  const estilos = {
+    person: { fill: "#08427b", borda: "#052e56", texto: "#fff" },
+    cont:   { fill: "#438dd5", borda: "#2e6295", texto: "#fff" },
+    comp:   { fill: "#85bbf0", borda: "#5a9bd4", texto: "#0b1f33" },
+    dom:    { fill: "#1168bd", borda: "#0b4a8a", texto: "#fff" },
+    port:   { fill: "#eef3f9", borda: "#5a9bd4", texto: "#0b1f33", tracejado: true },
+    ext:    { fill: "#8d8d8d", borda: "#6b6b6b", texto: "#fff" },
+    neutro: { fill: "#f7f9fb", borda: "#5b6770", texto: "#1c2430" },
+  };
+  const nos = spec.nos, W = spec.W, H = spec.H;
+  const anc = (n, lado) => ({ t: [n.x + n.w / 2, n.y], b: [n.x + n.w / 2, n.y + n.h], l: [n.x, n.y + n.h / 2], r: [n.x + n.w, n.y + n.h / 2] })[lado];
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="seta-${alvo}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4a5560"/></marker></defs>`;
+  for (const g of spec.grupos || []) {
+    svg += `<rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="6" fill="#f4f7fa" stroke="#8a97a3" stroke-dasharray="6 3"/>
+    <text x="${g.x + 8}" y="${g.y + 14}" font-size="11" fill="#4a5560" font-weight="600">${esc(g.t)}</text>`;
+    if (g.id) nos[g.id] = { x: g.x, y: g.y, w: g.w, h: g.h, oculto: true };
+  }
+  let rotulos = "";
+  for (const e of spec.arestas || []) {
+    const [x1, y1] = anc(nos[e.de], e.a), [x2, y2] = anc(nos[e.para], e.b);
+    const f = e.f ?? 0.5, lx = x1 + (x2 - x1) * f + (e.dx ?? 0), ly = y1 + (y2 - y1) * f + (e.dy ?? 0);
+    svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#4a5560" stroke-width="1.3" marker-end="url(#seta-${alvo})"${e.d ? ' stroke-dasharray="5 3"' : ""}/>`;
+    if (e.l) rotulos += `<text x="${lx}" y="${ly + 3.5}" font-size="9.5" fill="#1c2430" text-anchor="middle" style="paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round">${esc(e.l)}</text>`;
+  }
+  for (const n of Object.values(nos)) {
+    if (n.oculto) continue;
+    const st = estilos[n.k] || estilos.cont;
+    const tracejado = st.tracejado ? ' stroke-dasharray="4 2"' : "";
+    if (n.forma === "db") {
+      const ry = 7;
+      svg += `<path d="M${n.x},${n.y + ry} a${n.w / 2},${ry} 0 0 1 ${n.w},0 v${n.h - 2 * ry} a${n.w / 2},${ry} 0 0 1 -${n.w},0 z" fill="${st.fill}" stroke="${st.borda}"/>
+      <path d="M${n.x},${n.y + ry} a${n.w / 2},${ry} 0 0 0 ${n.w},0" fill="none" stroke="${st.borda}"/>`;
+    } else {
+      svg += `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="4" fill="${st.fill}" stroke="${st.borda}"${tracejado}/>`;
+      if (n.forma === "fila") svg += `<line x1="${n.x + 6}" y1="${n.y}" x2="${n.x + 6}" y2="${n.y + n.h}" stroke="#fff" stroke-opacity=".8"/><line x1="${n.x + n.w - 6}" y1="${n.y}" x2="${n.x + n.w - 6}" y2="${n.y + n.h}" stroke="#fff" stroke-opacity=".8"/>`;
+    }
+    if (n.k === "person") svg += `<circle cx="${n.x + n.w / 2}" cy="${n.y - 2}" r="9" fill="${st.fill}" stroke="#fff" stroke-width="1.5"/>`;
+    const linhas = [n.t, ...(Array.isArray(n.s) ? n.s : n.s ? [n.s] : [])];
+    const alt = 12.5, y0 = n.y + n.h / 2 - ((linhas.length - 1) * alt) / 2 + 4 + (n.forma === "db" ? 3 : 0);
+    linhas.forEach((l, i) => {
+      svg += `<text x="${n.x + n.w / 2}" y="${y0 + i * alt}" font-size="${i === 0 ? 11.5 : 9.5}" font-weight="${i === 0 ? 700 : 400}" fill="${st.texto}" text-anchor="middle">${esc(l)}</text>`;
+    });
+  }
+  svg += rotulos;
+  if (spec.legenda) {
+    let x = 40;
+    svg += `<g font-size="9.5" fill="#4a5560">`;
+    for (const [k, texto] of spec.legenda) {
+      if (k === "tracejado") svg += `<line x1="${x}" y1="${H - 9}" x2="${x + 28}" y2="${H - 9}" stroke="#4a5560" stroke-dasharray="5 3"/><text x="${x + 34}" y="${H - 5}">${esc(texto)}</text>`;
+      else svg += `<rect x="${x}" y="${H - 14}" width="10" height="10" fill="${estilos[k].fill}" stroke="${estilos[k].borda}"/><text x="${x + 14}" y="${H - 5}">${esc(texto)}</text>`;
+      x += 14 + texto.length * 5.4 + 22;
+    }
+    svg += `</g>`;
+  }
+  document.getElementById(alvo).innerHTML = svg;
+}
+</script>
+<style>
+  @page { size: A4; margin: 14mm 14mm 14mm 14mm; }
+  @page paisagem { size: A4 landscape; margin: 12mm 14mm; }
+  .paisagem { page: paisagem; page-break-before: always; page-break-after: always; }
+  :root { --azul: #0b3d5c; --azul2: #1168bd; --cinza: #5b6770; --linha: #d9dee3; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; color: #1c2430; margin: 0; line-height: 1.42; }
+  table.pagina { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  table.pagina > thead > tr > td { text-align: right; font-size: 8.5pt; color: var(--cinza); border-bottom: 1px solid var(--linha); padding: 0 0 4px; }
+  table.pagina > tfoot > tr > td { text-align: center; font-size: 8.5pt; color: var(--cinza); border-top: 1px solid var(--linha); padding: 4px 0 0; }
+  table.pagina > tbody > tr > td { padding: 10px 0 0; }
+  thead { display: table-header-group; } tfoot { display: table-footer-group; }
+  h1 { color: var(--azul); font-size: 18pt; margin: 0 0 8px; page-break-before: always; page-break-after: avoid; border-bottom: 2px solid var(--azul); padding-bottom: 4px; }
+  h1.sem-quebra { page-break-before: auto; }
+  h2 { color: var(--azul); font-size: 13.5pt; margin: 18px 0 6px; page-break-after: avoid; }
+  h3 { color: var(--azul2); font-size: 11.5pt; margin: 14px 0 4px; page-break-after: avoid; }
+  p { margin: 5px 0 7px; text-align: justify; }
+  ul { margin: 4px 0 8px 18px; padding: 0; } li { margin: 2px 0; }
+  table.t { width: 100%; border-collapse: collapse; margin: 6px 0 10px; font-size: 9.5pt; page-break-inside: auto; }
+  table.t th, table.t td { border: 1px solid var(--linha); padding: 4px 6px; vertical-align: top; text-align: left; }
+  table.t th { background: #eef3f7; color: var(--azul); font-weight: 600; }
+  table.t tr { page-break-inside: avoid; }
+  code, pre { font-family: Consolas, "Courier New", monospace; font-size: 8.8pt; }
+  code { background: #f1f4f6; padding: 0 3px; border-radius: 3px; }
+  pre.codigo { background: #f7f9fb; border: 1px solid var(--linha); border-radius: 4px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word; overflow: hidden; page-break-inside: avoid; }
+  table.t td, table.t th { word-break: break-word; }
+  .figura { page-break-inside: avoid; margin: 10px 0 14px; text-align: center; }
+  .figura .mermaid { display: flex; justify-content: center; }
+  .figura .mermaid svg { white-space: normal; }
+  .figura svg { max-width: 100% !important; height: auto !important; }
+  .mermaid .nodeLabel, .mermaid .label, .mermaid .edgeLabel, .mermaid foreignObject div, .mermaid foreignObject span, .mermaid .cluster-label { text-align: center !important; }
+  .mermaid .edgeLabel { background: #fff; padding: 0 2px; }
+  .legenda { font-size: 9pt; color: var(--cinza); margin-top: 4px; text-align: center; }
+  .nota { background: #fff8e6; border-left: 3px solid #e3b341; padding: 6px 10px; font-size: 9.5pt; margin: 8px 0; }
+  .capa { text-align: center; padding-top: 110px; page-break-after: always; }
+  .capa .titulo { font-size: 34pt; font-weight: 700; color: var(--azul); letter-spacing: 2px; }
+  .capa .sub { font-size: 16pt; margin-top: 10px; }
+  .capa .sub2 { font-size: 11pt; color: var(--cinza); margin-top: 6px; }
+  .capa .integrantes { margin-top: 50px; font-size: 11.5pt; }
+  .capa .escopo { margin: 40px auto 0; max-width: 150mm; font-size: 10pt; text-align: justify; }
+  .capa .data { margin-top: 40px; font-size: 11pt; }
+  .sumario li { margin: 3px 0; }
+  .canvas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; font-size: 8.3pt; page-break-inside: avoid; }
+  .canvas > div { border: 1px solid #c9d0d6; border-radius: 5px; padding: 5px 7px; min-height: 60px; background: #fafbfc; }
+  .canvas h4 { margin: 0 0 3px; font-size: 8.8pt; color: var(--azul); }
+  .canvas .verde { background: #eaf5ec; } .canvas .amarelo { background: #fff7e0; } .canvas .azul { background: #e6f0fa; }
+  .canvas .largo3 { grid-column: span 2; }
+  .canvas .decisoes { grid-column: 1 / -1; background: #1f3a63; color: #fff; }
+  .canvas .decisoes h4 { color: #fff; }
+  .canvas ul { margin: 0 0 0 13px; } .canvas li { margin: 1px 0; }
+  .c4legenda { display: inline-block; font-size: 8.5pt; color: var(--cinza); margin-top: 4px; }
+  .c4legenda span { display: inline-block; width: 10px; height: 10px; margin: 0 3px 0 10px; vertical-align: middle; border-radius: 2px; }
+  .ok { color: #1b7f3b; font-weight: 600; } .sub- { color: #b35c00; font-weight: 600; }
+</style>
+</head>
+<body>
+<table class="pagina">
+<thead><tr><td>InvestLab | Documentação de Arquitetura</td></tr></thead>
+<tfoot><tr><td>Arc42 - versão acadêmica completa (Entrega 2) | 15/10/2026</td></tr></tfoot>
+<tbody><tr><td>
+
+<!-- ===================== CAPA ===================== -->
+<div class="capa">
+  <div class="titulo">INVESTLAB</div>
+  <div class="sub">Documentação de Arquitetura de Software</div>
+  <div class="sub2">Arc42 + C4 Model + UML + DER + Software Architecture Canvas</div>
+  <div class="sub2">Entrega 2 - Documentação completa (TDE Grupo - PJBL)</div>
+  <div class="integrantes">
+    <strong>Integrantes</strong><br>
+    Arthur Ambrozewicz Cidral<br>
+    Erick Marlon Barbieri da Silva<br>
+    Luan Alberti Estevinho<br>
+    Vinícius de Oliveira Garcia
+  </div>
+  <div class="escopo">
+    <strong>Escopo desta entrega:</strong> documentação completa da arquitetura do InvestLab, evoluindo o monólito modular da Entrega 1 para uma arquitetura de soluções cloud com <em>Microfrontend</em>, <em>API Gateway</em>, <em>Backend for Frontend</em>, <em>Microservices</em> com <em>Database per Service</em>, <em>Serverless</em> (Azure Functions), <em>Arquitetura Orientada a Eventos</em> (Azure Service Bus), <em>Clean Architecture</em> + <em>Vertical Slice</em> e <em>Testes Unitários de Arquitetura</em>. Os níveis 1-4 do C4, UML, DER e Canvas refletem o código do repositório <code>investlab</code> que será entregue na Entrega 3.
+  </div>
+  <div class="data">15 de outubro de 2026<br><span style="font-size:9.5pt;color:var(--cinza)">Disciplina: Arquitetura e Soluções Cloud (PSO129) - Prof. Manoel Valerio da Silveira Neto - PUCPR - Eng. de Software - 6º B Noite</span></div>
+</div>
+
+<!-- ===================== SUMÁRIO ===================== -->
+<h1 class="sem-quebra">Sumário</h1>
+<ol class="sumario">
+  <li><strong>Introdução e Metas</strong> - Requisitos, metas de qualidade e stakeholders</li>
+  <li><strong>Restrições de Arquitetura</strong> - Restrições técnicas, organizacionais e convenções</li>
+  <li><strong>Contexto e Escopo</strong> - Contexto de negócio, contexto técnico e C4 Nível 1</li>
+  <li><strong>Estratégia de Solução</strong> - Estilos arquiteturais adotados, princípios e Canvas</li>
+  <li><strong>Visão de Blocos de Construção</strong> - C4 Níveis 2 e 3, UML Nível 4 (componentes e classes) e DER</li>
+  <li><strong>Visão de Runtime</strong> - Cenários e diagramas UML de sequência (incluindo o fluxo de eventos)</li>
+  <li><strong>Visão de Implantação</strong> - Azure, AWS API Gateway, MongoDB Atlas, Docker Hub</li>
+  <li><strong>Conceitos Transversais</strong> - Clean Architecture, Vertical Slice, testes de arquitetura, segurança, eventos, erros, observabilidade</li>
+  <li><strong>Decisões Arquiteturais</strong> - ADRs com estado (mantidas, substituídas e novas)</li>
+  <li><strong>Requisitos de Qualidade</strong> - Árvore de qualidade e cenários mensuráveis</li>
+  <li><strong>Riscos e Dívida Técnica</strong> - Riscos atuais, impacto e mitigação</li>
+</ol>
+<p><strong>Referências</strong> - Fontes do projeto, material da disciplina e referências oficiais. <strong>Declaração de uso de IA generativa.</strong></p>
+
+<h2>Evolução em relação à Entrega 1</h2>
+<p>A Entrega 1 (10/09/2026) documentou o InvestLab como um <strong>monólito modular</strong> (React/Next.js + Python/FastAPI + PostgreSQL), deixando os aspectos de nuvem como direção de evolução. Esta entrega mantém <strong>requisitos, metas de qualidade, stakeholders, contexto de negócio, domínio e riscos já aceitos</strong> e substitui as decisões estruturais, conforme a tabela abaixo. Cada substituição está registrada na seção 9 como ADR com estado.</p>
+<table class="t">
+  <tr><th>Aspecto</th><th>Entrega 1 (parcial)</th><th>Entrega 2 (completa)</th></tr>
+  <tr><td>Decomposição</td><td>Monólito modular com 10 componentes internos</td><td>2 microserviços + BFF + Azure Functions, cada um com Clean Architecture e fatias verticais</td></tr>
+  <tr><td>Frontend</td><td>Aplicação web única (Next.js)</td><td>Microfrontend: shell + 2 remotes (React, Vite, Module Federation) no Azure Static Web Apps</td></tr>
+  <tr><td>Entrada</td><td>Web chama a API diretamente</td><td>API Gateway (AWS HTTP API) → BFF (<code>GET /aggregated-data</code>) → serviços</td></tr>
+  <tr><td>Persistência</td><td>PostgreSQL único</td><td>Database per Service: MongoDB Atlas (ativos) e Azure SQL Database (carteira)</td></tr>
+  <tr><td>Integração</td><td>Chamadas síncronas internas</td><td>EDA: evento <code>cotacao-atualizada</code> no Azure Service Bus, consumido por Function</td></tr>
+  <tr><td>Cálculo pesado</td><td>Motores dentro do backend</td><td>Serverless: simulação em Azure Function (HTTP trigger)</td></tr>
+  <tr><td>Linguagem</td><td>Python (backend) + TypeScript (web)</td><td>TypeScript/Node.js em todos os containers (ADR-09)</td></tr>
+  <tr><td>Garantia estrutural</td><td>Convenções</td><td>Testes unitários de arquitetura (tsarch, estilo ArchUnit) executados no CI</td></tr>
+</table>
+
+<!-- ===================== 1 ===================== -->
+<h1>1. Introdução e Metas</h1>
+<p>Esta seção apresenta o propósito do InvestLab, os requisitos que orientam a versão 2.0, as metas de qualidade e as partes interessadas. A estrutura segue a seção 1 do arc42 (requisitos relevantes, metas de qualidade e stakeholders).</p>
+
+<h2>1.1 Visão geral dos requisitos</h2>
+<p>O InvestLab é uma plataforma web de inteligência, análise, simulação e comparação de investimentos. A proposta é centralizar informações sobre FIIs, ações e produtos de renda fixa, permitindo análise estatística, simulação de aportes, backtests, comparação de renda fixa e acompanhamento de uma carteira virtual.</p>
+<p>O sistema apoia decisão, mas não prevê o futuro nem recomenda automaticamente compra ou venda. As saídas são análises históricas ou simulações baseadas em premissas registradas, deixando a interpretação final sob responsabilidade do usuário.</p>
+
+<h3>1.1.1 Problemas que o sistema resolve</h3>
+<ul>
+  <li>Informações de investimento distribuídas entre diferentes sites e ferramentas.</li>
+  <li>Dificuldade para comparar FIIs, ações e renda fixa sob parâmetros comuns.</li>
+  <li>Comparações superficiais que consideram apenas rentabilidade bruta.</li>
+  <li>Dificuldade para estimar aportes mensais, reinvestimentos e horizontes longos.</li>
+  <li>Dificuldade para visualizar risco, volatilidade, drawdown, tributação e liquidez.</li>
+  <li>Ausência de um ambiente único para testar e comparar estratégias.</li>
+</ul>
+
+<h3>1.1.2 Escopo da versão 2.0</h3>
+<ul>
+  <li>FIIs, ações, CDB, LCI, LCA e títulos do Tesouro Direto (catálogo de ativos com cotação).</li>
+  <li>Pesquisa e visualização de ativos e indicadores; carteira virtual com aportes e patrimônio.</li>
+  <li>Simulação de patrimônio com cenários conservador, base e otimista (serverless).</li>
+  <li>Reavaliação automática das carteiras quando uma cotação muda (orientado a eventos).</li>
+  <li>Dashboard consolidado agregado pelo BFF.</li>
+  <li>Preparação para a Entrega 3: Swagger em todos os serviços, imagens Docker, repositórios públicos.</li>
+</ul>
+
+<h3>1.1.3 Fora do escopo</h3>
+<ul>
+  <li>Compra, venda ou custódia de ativos; integração operacional com corretoras ou Open Finance.</li>
+  <li>Criptomoedas, mercado internacional, opções e day trade; cotação tick-by-tick.</li>
+  <li>Apuração fiscal completa; recomendação automática ou previsão de preços por IA.</li>
+  <li>Nesta entrega (documental): autenticação de produção, backtests e laboratório de estratégias ficam como fatias futuras já posicionadas na arquitetura (seção 11.1).</li>
+</ul>
+
+<h3>1.1.4 Requisitos funcionais</h3>
+<p>Os 20 requisitos da Entrega 1 são mantidos; a última coluna indica em qual bloco da nova arquitetura cada requisito é atendido (rastreabilidade requisito → container).</p>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th>Requisito</th><th style="width:36%">Onde é atendido na v2.0</th></tr>
+  <tr><td>RF01</td><td>Criar conta, autenticar e encerrar sessão.</td><td>API Gateway (JWT authorizer) - Entrega 3</td></tr>
+  <tr><td>RF02</td><td>Cadastrar e atualizar perfil de simulação.</td><td>ms-carteira (fatia futura <code>perfil</code>)</td></tr>
+  <tr><td>RF03</td><td>Pesquisar e consultar FIIs, ações e renda fixa.</td><td>ms-ativos (<code>listar-ativos</code>, <code>obter-ativo</code>) via BFF; mfe-ativos</td></tr>
+  <tr><td>RF04</td><td>Exibir preços, proventos e indicadores aplicáveis.</td><td>ms-ativos; mfe-ativos</td></tr>
+  <tr><td>RF05</td><td>Calcular retorno, volatilidade, drawdown e estatísticas.</td><td>fn-simulacao (função analítica futura)</td></tr>
+  <tr><td>RF06</td><td>Gerar visualizações estatísticas, incluindo Box Plot.</td><td>mfe-ativos (fatia futura)</td></tr>
+  <tr><td>RF07</td><td>Simular evolução com capital, aportes, prazo e reinvestimento.</td><td>fn-simulacao <code>POST /api/simular</code> via BFF; mfe-carteira</td></tr>
+  <tr><td>RF08</td><td>Apresentar cenários conservador, base e otimista.</td><td>fn-simulacao (domínio <code>Simulador</code>)</td></tr>
+  <tr><td>RF09</td><td>Cadastrar ofertas de CDB, LCI e LCA.</td><td>ms-ativos (tipos CDB/LCI/LCA)</td></tr>
+  <tr><td>RF10</td><td>Calcular bruto, tributação estimada, líquido e rentabilidade.</td><td>fn-simulacao (fatia futura <code>renda-fixa</code>)</td></tr>
+  <tr><td>RF11</td><td>Comparar renda fixa por prazo, liquidez e retorno líquido.</td><td>fn-simulacao + BFF (agregação)</td></tr>
+  <tr><td>RF12</td><td>Calcular taxa bruta equivalente.</td><td>fn-simulacao</td></tr>
+  <tr><td>RF13</td><td>Informar exposição simulada e cobertura aplicável do FGC.</td><td>ms-carteira + fonte FGC</td></tr>
+  <tr><td>RF14</td><td>Executar backtests e comparar com referências.</td><td>fn-simulacao (fatia futura <code>backtest</code>)</td></tr>
+  <tr><td>RF15</td><td>Criar, editar e acompanhar carteira virtual.</td><td>ms-carteira (<code>criar-carteira</code>, <code>registrar-aporte</code>, <code>atualizar-precos</code>); mfe-carteira</td></tr>
+  <tr><td>RF16</td><td>Exibir dashboard consolidado da carteira.</td><td>bff-web <code>GET /aggregated-data</code>; mfe-shell</td></tr>
+  <tr><td>RF17</td><td>Criar diferentes estratégias no Laboratório.</td><td>fatia futura (ms-carteira)</td></tr>
+  <tr><td>RF18</td><td>Comparar estratégias com parâmetros equivalentes.</td><td>fatia futura (fn-simulacao + BFF)</td></tr>
+  <tr><td>RF19</td><td>Atualizar dados de mercado periodicamente.</td><td>ms-ativos <code>atualizar-cotacao</code> + evento <code>cotacao-atualizada</code> (Timer trigger na Entrega 3)</td></tr>
+  <tr><td>RF20</td><td>Informar data de atualização e limitações das análises.</td><td>Campo <code>dataReferencia</code> em todos os contratos; aviso no mfe-shell</td></tr>
+</table>
+
+<h2>1.2 Metas de qualidade</h2>
+<table class="t">
+  <tr><th style="width:60px">Prior.</th><th style="width:28%">Meta</th><th>Cenário de avaliação</th></tr>
+  <tr><td>1</td><td>Correção e precisão</td><td>Entradas e premissas idênticas produzem resultados determinísticos; fórmulas financeiras corretas e valores monetários em centavos inteiros.</td></tr>
+  <tr><td>2</td><td>Usabilidade</td><td>Usuário com conhecimentos básicos conclui uma comparação simples em até 10 minutos, sem treinamento formal.</td></tr>
+  <tr><td>3</td><td>Desempenho</td><td>Pelo menos 95% das consultas e análises comuns respondem em até 3 s em condições normais; o dashboard agrega as três fontes em paralelo.</td></tr>
+  <tr><td>4</td><td>Confiabilidade dos dados</td><td>Falha de fonte externa não substitui a última base válida; a cotação só avança com data de referência igual ou posterior.</td></tr>
+  <tr><td>5</td><td>Segurança e privacidade</td><td>Perfil, carteira e simulações privadas acessíveis apenas a usuários autenticados; serviços nunca expostos sem o gateway; segredos fora do código.</td></tr>
+  <tr><td>6</td><td>Modificabilidade (nova)</td><td>Uma funcionalidade nova entra como uma fatia vertical sem alterar outras fatias; a regra das dependências é verificada por testes automatizados.</td></tr>
+  <tr><td>7</td><td>Disponibilidade e resiliência (nova)</td><td>A indisponibilidade de um serviço degrada apenas a parte afetada do dashboard; eventos não processados são reentregues e, por fim, enviados à dead-letter.</td></tr>
+</table>
+
+<h2>1.3 Partes interessadas</h2>
+<table class="t">
+  <tr><th style="width:26%">Stakeholder</th><th style="width:22%">Papel</th><th>Expectativas</th></tr>
+  <tr><td>Investidor</td><td>Usuário final</td><td>Análises compreensíveis, simulações, carteira e comparação sem múltiplas ferramentas.</td></tr>
+  <tr><td>Equipe de desenvolvimento</td><td>Responsável pelo produto</td><td>Arquitetura organizada, testável, documentada e viável academicamente; evolução por fatias independentes.</td></tr>
+  <tr><td>Professor e avaliadores</td><td>Avaliação acadêmica</td><td>Aplicação correta de Arc42, C4, UML e dos estilos arquiteturais da disciplina, refletidos no código.</td></tr>
+  <tr><td>Provedores de dados (B3, CVM, BCB, Tesouro, FGC)</td><td>Sistemas externos</td><td>Disponibilidade de dados de mercado, fundos e indicadores dentro das condições de uso.</td></tr>
+  <tr><td>Responsável pela manutenção</td><td>Operação técnica</td><td>Monitorar integrações e filas, corrigir falhas, controlar custos dos planos gratuitos.</td></tr>
+</table>
+
+<!-- ===================== 2 ===================== -->
+<h1>2. Restrições de Arquitetura</h1>
+<p>As restrições abaixo delimitam as escolhas do projeto. As marcadas como <em>novas</em> decorrem dos estilos arquiteturais exigidos na disciplina e dos planos gratuitos disponíveis à equipe.</p>
+<h2>2.1 Restrições técnicas</h2>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th style="width:34%">Restrição</th><th>Consequência</th></tr>
+  <tr><td>RT01</td><td>Aplicação web responsiva</td><td>Acesso por navegador em computadores e dispositivos móveis.</td></tr>
+  <tr><td>RT02</td><td>React + Vite + Module Federation</td><td>Frontend dividido em shell e remotes implantáveis de forma independente (substitui Next.js).</td></tr>
+  <tr><td>RT03</td><td>Node.js 22 + TypeScript em todos os serviços</td><td>Uma única linguagem para BFF (exigido pelo enunciado), microserviços e Functions; menor carga cognitiva para a equipe.</td></tr>
+  <tr><td>RT04</td><td>MongoDB Atlas (free tier) e Azure SQL Database (free, 1 DTU)</td><td>Database per Service: cada microserviço é dono exclusivo da sua base; nenhuma consulta cruza bases.</td></tr>
+  <tr><td>RT05</td><td>Microserviços + BFF + API Gateway</td><td>O frontend só conhece o gateway; o gateway só conhece o BFF; o BFF orquestra serviços e Functions.</td></tr>
+  <tr><td>RT06</td><td>REST + JSON + HTTPS; eventos JSON versionados</td><td>Contratos síncronos em OpenAPI 3 (Swagger) e assíncronos em JSON Schema (<code>contracts/events</code>).</td></tr>
+  <tr><td>RT07</td><td>Dependência de fontes externas</td><td>Mudanças ou indisponibilidade afetam atualização; integrações isoladas no ms-ativos.</td></tr>
+  <tr><td>RT08</td><td>Resultados com data e premissas</td><td>Evita apresentar cenários hipotéticos ou dados desatualizados como fatos atuais.</td></tr>
+  <tr><td>RT09</td><td>Sem execução de ordens</td><td>O sistema permanece analítico, sem movimentação financeira.</td></tr>
+  <tr><td>RT10</td><td>Markdown e Mermaid no material-base</td><td>Documentação versionada junto com o código; este PDF é gerado a partir de <code>docs/</code>.</td></tr>
+  <tr><td>RT11</td><td>Azure for Students e planos gratuitos (nova)</td><td>Functions no plano Consumption, Service Bus Basic/Standard mínimo, SWA Free, Atlas M0, Azure SQL free; limites de carga e sem SLA.</td></tr>
+  <tr><td>RT12</td><td>Repositórios públicos no GitHub e imagens no Docker Hub (nova)</td><td>Nenhum segredo no código ou nas imagens; configuração exclusivamente por variáveis de ambiente.</td></tr>
+</table>
+<h2>2.2 Restrições organizacionais</h2>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th style="width:34%">Restrição</th><th>Consequência</th></tr>
+  <tr><td>RO01</td><td>Mesma equipe do TDE (4 integrantes)</td><td>Mantém continuidade do projeto desde a Entrega 1.</td></tr>
+  <tr><td>RO02</td><td>Recursos acadêmicos</td><td>Funcionalidades priorizadas; complexidades podem ser postergadas como fatias futuras.</td></tr>
+  <tr><td>RO03</td><td>Entrega documental completa (Entrega 2) e de software (Entrega 3, 12/11/2026)</td><td>Esta versão documenta os 11 capítulos; o código entregue na Entrega 3 deve refletir esta documentação.</td></tr>
+  <tr><td>RO04</td><td>Versionamento</td><td>Código e documentação com rastreabilidade (ADRs, contratos versionados, figuras numeradas).</td></tr>
+  <tr><td>RO05</td><td>Uso autorizado das fontes e da IA generativa</td><td>Dados externos respeitam condições de uso; uso de IA declarado (Res. 274/2024 CONSUN).</td></tr>
+</table>
+<h2>2.3 Convenções</h2>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th style="width:34%">Convenção</th><th>Aplicação</th></tr>
+  <tr><td>CV01</td><td>RFNN / ADR-NN / QNN / RNN</td><td>Identificadores de requisitos, decisões, cenários de qualidade e riscos.</td></tr>
+  <tr><td>CV02</td><td>REST / JSON</td><td>Recursos no plural (<code>/ativos</code>, <code>/carteiras</code>), verbos HTTP semânticos, erros padronizados (<code>{erro, mensagem}</code>).</td></tr>
+  <tr><td>CV03</td><td>BRL em centavos inteiros</td><td>Todo valor monetário trafega e persiste como inteiro (<code>precoCentavos</code>), evitando erro de ponto flutuante.</td></tr>
+  <tr><td>CV04</td><td>Datas</td><td>ISO-8601 UTC nos contratos; formato local na interface.</td></tr>
+  <tr><td>CV05</td><td>Termos financeiros</td><td>Indicadores explicados na interface; simulações rotuladas como premissas.</td></tr>
+  <tr><td>CV06</td><td>Simulações rastreáveis</td><td>Entradas, premissas e data de referência acompanham todo resultado.</td></tr>
+  <tr><td>CV07</td><td>C4 consistente</td><td>Diagramas indicam tipo, responsabilidade, tecnologia e relações rotuladas.</td></tr>
+  <tr><td>CV08</td><td>Eventos nomeados e versionados (nova)</td><td><code>investlab.&lt;contexto&gt;.&lt;evento&gt;</code> com campo <code>versao</code>; esquema em <code>contracts/events/*.vN.json</code>.</td></tr>
+  <tr><td>CV09</td><td>Estrutura de pastas por camada e por fatia (nova)</td><td><code>src/domain</code>, <code>src/application/ports</code>, <code>src/features/&lt;caso-de-uso&gt;</code>, <code>src/infrastructure</code>, <code>src/api</code>; verificada por <code>test/arquitetura.test.ts</code>.</td></tr>
+</table>
+
+<!-- ===================== 3 ===================== -->
+<h1>3. Contexto e Escopo</h1>
+<p>O InvestLab é delimitado como uma plataforma analítica. O investidor fornece perfil e parâmetros; fontes externas fornecem dados financeiros e econômicos; o sistema processa essas informações e devolve indicadores, simulações e comparações. A execução de investimentos permanece fora da fronteira do sistema.</p>
+<h2>3.1 Contexto de negócio</h2>
+<p>No contexto de negócio, o sistema é visto como uma única caixa. O investidor é o ator principal. B3, CVM, Banco Central, Tesouro Direto e FGC aparecem como sistemas externos de onde o InvestLab obtém dados. A decomposição interna em microfrontends, gateway, BFF, microserviços e Functions não altera essa fronteira.</p>
+<h3>3.1.1 C4 Nível 1 - Diagrama de Contexto</h3>
+<div class="figura">
+<div class="mermaid">
+C4Context
+  title Figura 1 - C4 Nível 1: contexto do sistema InvestLab
+  Person(investidor, "Investidor", "Analisa ativos, cria carteiras virtuais, executa simulações e compara estratégias.")
+  System(investlab, "InvestLab", "Plataforma web para análise, comparação e simulação de FIIs, ações e renda fixa. Não executa ordens.")
+  System_Ext(b3, "B3", "Preços históricos, negociação e informações de mercado.")
+  System_Ext(cvm, "CVM", "Dados cadastrais e estruturados de FIIs.")
+  System_Ext(bcb, "Banco Central", "Indicadores econômicos (Selic, IPCA).")
+  System_Ext(tesouro, "Tesouro Direto", "Preços e taxas dos títulos públicos.")
+  System_Ext(fgc, "FGC", "Instituições, conglomerados e regras de cobertura.")
+  Rel(investidor, investlab, "Usa a plataforma", "HTTPS")
+  Rel(investlab, b3, "Coleta dados de mercado", "HTTPS")
+  Rel(investlab, cvm, "Coleta dados de FIIs", "HTTPS")
+  Rel(investlab, bcb, "Coleta indicadores", "HTTPS")
+  Rel(investlab, tesouro, "Coleta preços e taxas", "HTTPS")
+  Rel(investlab, fgc, "Consulta cobertura", "HTTPS")
+  UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+</div>
+<div class="legenda">Figura 1 - C4 Nível 1: contexto do sistema. Legenda C4: <em>Person</em> representa o usuário; <em>Software System</em> representa o InvestLab; <em>External System</em> (cinza) representa sistemas fora da responsabilidade do projeto. As relações indicam o sentido da interação.</div>
+</div>
+
+<h2>3.2 Interfaces de negócio</h2>
+<table class="t">
+  <tr><th style="width:20%">Parceiro</th><th>Entradas recebidas pelo InvestLab</th><th>Saídas do InvestLab</th></tr>
+  <tr><td>Investidor</td><td>Cadastro, perfil, ativos, ofertas, carteira, aportes e premissas.</td><td>Indicadores, gráficos, simulações, backtests, comparações, alertas e dashboard.</td></tr>
+  <tr><td>B3</td><td>Dados de preços e ativos.</td><td>Solicitações de consulta ou coleta.</td></tr>
+  <tr><td>CVM</td><td>Dados públicos e cadastrais de FIIs.</td><td>Parâmetros de consulta.</td></tr>
+  <tr><td>Banco Central</td><td>Selic e séries selecionadas.</td><td>Código da série e período.</td></tr>
+  <tr><td>Tesouro Direto</td><td>Títulos, taxas, preços e vencimentos.</td><td>Parâmetros de consulta.</td></tr>
+  <tr><td>FGC</td><td>Instituições e regras de cobertura.</td><td>Identificação de instituição ou conglomerado.</td></tr>
+</table>
+
+<h2>3.3 Contexto técnico</h2>
+<p>O contexto técnico conecta o navegador ao Azure Static Web Apps (microfrontends), que fala exclusivamente com o API Gateway (AWS). O gateway encaminha ao BFF, hospedado no Azure, que orquestra os microserviços, a Azure Function e, indiretamente, o Azure Service Bus. Os bancos ficam em serviços gerenciados (MongoDB Atlas e Azure SQL). O detalhamento dos containers está na seção 5 e a implantação física na seção 7.</p>
+<table class="t">
+  <tr><th style="width:26%">Canal</th><th style="width:24%">Protocolo / tecnologia</th><th>Observação</th></tr>
+  <tr><td>Navegador → mfe-shell / remotes</td><td>HTTPS, ES modules (Module Federation)</td><td>Remotes carregados em runtime por <code>remoteEntry.js</code>.</td></tr>
+  <tr><td>mfe-* → API Gateway</td><td>HTTPS / JSON (REST)</td><td>Única URL pública de API; CORS restrito ao domínio do shell.</td></tr>
+  <tr><td>API Gateway → BFF</td><td>HTTP proxy</td><td>Roteamento <code>/aggregated-data</code> e <code>/api/*</code>.</td></tr>
+  <tr><td>BFF → ms-ativos / ms-carteira / fn-simulacao</td><td>HTTP / JSON, timeout 5 s</td><td>Chamadas em paralelo; falha parcial degrada graciosamente.</td></tr>
+  <tr><td>ms-ativos → Service Bus → fn-simulacao → ms-carteira</td><td>AMQP (tópico + assinatura) e HTTP</td><td>Fluxo assíncrono orientado a eventos (seção 6.1).</td></tr>
+  <tr><td>ms-ativos → MongoDB Atlas; ms-carteira → Azure SQL</td><td>MongoDB wire protocol (TLS); TDS (TLS)</td><td>Credenciais via variáveis de ambiente.</td></tr>
+  <tr><td>ms-ativos → fontes externas</td><td>HTTPS (APIs/CSV)</td><td>Coleta periódica (Timer trigger na Entrega 3).</td></tr>
+</table>
+
+<!-- ===================== 4 ===================== -->
+<h1>4. Estratégia de Solução</h1>
+<p>A estratégia de solução da versão 2.0 decompõe o InvestLab por <strong>capacidades de negócio</strong> (ativos, carteira, simulação) e aplica os estilos arquiteturais estudados na disciplina de forma <em>intencional</em>: cada estilo resolve um problema concreto do sistema, e o custo adicional de cada um é registrado nas consequências dos ADRs (seção 9).</p>
+
+<h2>4.1 Princípios arquiteturais</h2>
+<ul>
+  <li><strong>Entrada única e frontend desacoplado:</strong> o microfrontend só conhece o API Gateway; o gateway só conhece o BFF.</li>
+  <li><strong>Um BFF por tipo de cliente:</strong> o <code>bff-web</code> adapta e agrega dados para a web (<code>GET /aggregated-data</code>); não possui banco nem regra de negócio de domínio.</li>
+  <li><strong>Microserviços donos dos seus dados:</strong> <code>ms-ativos</code> (MongoDB) e <code>ms-carteira</code> (Azure SQL) não compartilham base nem esquema; comunicam-se por eventos.</li>
+  <li><strong>Serverless para cálculo sob demanda e reação a eventos:</strong> a simulação (RF07/RF08) e o consumo de eventos rodam em Azure Functions, pagando apenas pelo uso.</li>
+  <li><strong>Consistência eventual explícita:</strong> a cotação muda no ms-ativos e as carteiras são reavaliadas de forma assíncrona e idempotente; o usuário vê <code>dataReferencia</code>.</li>
+  <li><strong>Clean Architecture + Vertical Slice em cada container:</strong> domínio sem dependências, portas em <code>application</code>, cada caso de uso em uma fatia com endpoint, handler e teste; infraestrutura nas bordas.</li>
+  <li><strong>Arquitetura verificável:</strong> as regras acima são testes automatizados (<code>test/arquitetura.test.ts</code>), não apenas convenção.</li>
+  <li><strong>Reprodutibilidade:</strong> premissas, data de referência e centavos inteiros em todo contrato (ADR-06 mantida).</li>
+</ul>
+
+<h2>4.2 Estilos arquiteturais adotados e onde aparecem</h2>
+<table class="t">
+  <tr><th style="width:22%">Estilo / padrão</th><th>Problema que resolve no InvestLab</th><th style="width:34%">Onde está no código</th></tr>
+  <tr><td>Microfrontend</td><td>Equipes evoluírem "Ativos" e "Carteira" sem redeploy do shell; falha de um módulo não derruba a aplicação.</td><td><code>frontend/mfe-shell</code> (host), <code>frontend/mfe-ativos</code>, <code>frontend/mfe-carteira</code> (remotes, <code>@originjs/vite-plugin-federation</code>)</td></tr>
+  <tr><td>API Gateway</td><td>Entrada única com CORS, throttling e autenticação centralizados; serviços nunca expostos.</td><td><code>gateway/openapi-gateway.yaml</code> (AWS HTTP API, integração <code>http_proxy</code>)</td></tr>
+  <tr><td>Backend for Frontend</td><td>Reduzir chamadas e payload da web; agregar três fontes em um JSON.</td><td><code>services/bff-web</code> - <code>features/aggregated-data</code>, proxies</td></tr>
+  <tr><td>Microservices</td><td>Escalar e implantar ativos e carteira independentemente; tecnologia de banco adequada a cada domínio.</td><td><code>services/ms-ativos</code>, <code>services/ms-carteira</code></td></tr>
+  <tr><td>Database per Service</td><td>Isolar esquemas; evitar acoplamento por banco.</td><td>MongoDB Atlas (<code>MongoAtivoRepository</code>) e Azure SQL (<code>SqlCarteiraRepository</code>, <code>sql/schema.sql</code>)</td></tr>
+  <tr><td>Serverless</td><td>Cálculo elástico da simulação; consumidor de eventos sem servidor dedicado.</td><td><code>services/fn-simulacao</code> - <code>functions/simular.ts</code> (HTTP), <code>functions/cotacaoAtualizada.ts</code> (Service Bus)</td></tr>
+  <tr><td>Arquitetura Orientada a Eventos</td><td>Propagar mudança de cotação para carteiras sem acoplamento síncrono entre microserviços.</td><td>Evento <code>investlab.ativos.cotacao-atualizada</code>; <code>ServiceBusEventPublisher</code>; <code>contracts/events</code></td></tr>
+  <tr><td>Clean Architecture</td><td>Proteger regras financeiras de frameworks, bancos e HTTP; testabilidade.</td><td><code>src/domain</code>, <code>src/application/ports</code>, <code>src/infrastructure</code>, <code>src/api</code> em cada serviço</td></tr>
+  <tr><td>Vertical Slice</td><td>Mudança localizada por caso de uso; cada fatia carrega endpoint, handler e teste.</td><td><code>src/features/&lt;caso-de-uso&gt;/{endpoint.ts, handler.ts, handler.test.ts}</code></td></tr>
+  <tr><td>Testes de arquitetura</td><td>Impedir que a regra das dependências se erosione.</td><td><code>test/arquitetura.test.ts</code> (tsarch) em todos os serviços</td></tr>
+</table>
+
+<h2>4.3 Estratégia de dados</h2>
+<p>Cada microserviço possui o modelo de dados que melhor serve ao seu domínio: ativos são documentos (um ticker, um documento, consultas por tipo), enquanto a carteira é relacional (carteira, posições e transações com integridade referencial e cálculo de patrimônio). A integração entre eles é exclusivamente por evento: o ms-ativos publica a nova cotação; a Function consome e aciona a fatia <code>atualizar-precos</code> do ms-carteira, que é idempotente. A última base válida nunca é substituída por dado mais antigo (regra de domínio em <code>Ativo.atualizarCotacao</code>), e o usuário sempre vê a data de atualização.</p>
+
+<h2>4.4 Software Architecture Canvas</h2>
+<div class="figura">
+<div class="canvas">
+  <div class="verde"><h4>1. Problema / Necessidade</h4><ul><li>Dados de investimento fragmentados</li><li>Comparações superficiais (só rentabilidade bruta)</li><li>Dificuldade de simular longo prazo</li><li>Falta de ambiente único de análise</li></ul></div>
+  <div class="verde"><h4>2. Usuários / Stakeholders</h4><ul><li>Investidor</li><li>Equipe de desenvolvimento</li><li>Professor / avaliadores</li><li>Provedores de dados</li><li>Responsável pela manutenção</li></ul></div>
+  <div class="verde"><h4>3. Valor / Resultado</h4><ul><li>Catálogo de ativos com cotação atual</li><li>Carteira virtual reavaliada automaticamente</li><li>Simulação com 3 cenários</li><li>Dashboard agregado em um único JSON</li><li>Sem recomendação automática</li></ul></div>
+  <div class="verde"><h4>4. Qualidades-chave</h4><ul><li>Correção / precisão (centavos, determinismo)</li><li>Usabilidade</li><li>Desempenho (agregação paralela)</li><li>Confiabilidade dos dados</li><li>Segurança; modificabilidade; resiliência</li></ul></div>
+  <div class="amarelo largo3"><h4>5. Estilo e princípios arquiteturais</h4><ul><li>Microfrontend (shell + remotes) → API Gateway → BFF → Microservices com Database per Service</li><li>Serverless (Azure Functions) para simulação e consumo de eventos</li><li>Arquitetura Orientada a Eventos (Service Bus, consistência eventual explícita)</li><li>Clean Architecture + Vertical Slice em cada serviço; regra das dependências verificada por testes</li><li>Integrações externas isoladas; resultados reproduzíveis e datados; REST + JSON sobre HTTPS; eventos versionados</li></ul></div>
+  <div class="amarelo"><h4>6. Blocos principais</h4><ul><li>mfe-shell, mfe-ativos, mfe-carteira (React)</li><li>API Gateway (AWS) · bff-web (Node)</li><li>ms-ativos (Node + MongoDB)</li><li>ms-carteira (Node + Azure SQL)</li><li>fn-simulacao (Azure Functions)</li><li>Azure Service Bus</li></ul></div>
+  <div class="amarelo"><h4>7. Integrações</h4><ul><li>B3 - mercado</li><li>CVM - dados públicos de FIIs</li><li>Banco Central - indicadores</li><li>Tesouro Direto - títulos</li><li>FGC - instituições / cobertura</li><li>Evento <code>cotacao-atualizada</code> entre serviços</li></ul></div>
+  <div class="azul"><h4>8. Dados</h4><ul><li>Ativos, preços, proventos (MongoDB)</li><li>Carteiras, posições, transações (Azure SQL)</li><li>Perfis e simulações (Azure SQL, evolução)</li><li>Ofertas de renda fixa e instituições / FGC (MongoDB, evolução)</li><li>Premissas e data de referência em todo resultado</li></ul></div>
+  <div class="azul"><h4>9. Operação / Observabilidade</h4><ul><li>Logs JSON estruturados; Application Insights</li><li>Health checks; métricas de duração</li><li>Dead-letter monitorada; reentrega</li><li>Última base válida preservada</li><li>CI: testes unitários + de arquitetura; imagens no Docker Hub</li></ul></div>
+  <div class="azul"><h4>10. Limites / Não-objetivos</h4><ul><li>Sem compra e venda; sem custódia</li><li>Sem Open Finance na V2</li><li>Sem cotação tick-by-tick</li><li>Sem apuração fiscal completa</li><li>Sem recomendação automática por IA</li></ul></div>
+  <div class="azul"><h4>11. Riscos principais</h4><ul><li>Consistência eventual confundir o usuário</li><li>Cold start e limites dos planos gratuitos</li><li>Multi-cloud (Azure + AWS)</li><li>Erros em fórmulas financeiras</li><li>Depuração distribuída</li></ul></div>
+  <div class="decisoes"><h4>12. Decisões arquiteturais centrais</h4>Microfrontend + API Gateway + BFF + 2 microserviços (ativos/MongoDB, carteira/Azure SQL) + Azure Functions + Service Bus; TypeScript/Node em todos os containers; Clean Architecture + Vertical Slice com testes de arquitetura (tsarch) no CI; cálculos determinísticos em centavos; segredos só por ambiente; Azure como nuvem principal e AWS para o gateway (ADR-08 a ADR-15; ADR-01 a ADR-04 da Entrega 1 substituídas). <span style="font-size:7.8pt;opacity:.85">Canvas elaborado para consolidar as decisões desta documentação; não substitui as seções detalhadas do arc42.</span></div>
+</div>
+<div class="legenda">Figura 2 - Software Architecture Canvas do InvestLab, no mesmo formato de 12 blocos da Entrega 1 (verde: objetivos; amarelo: solução; azul: avaliação). Mapeamento Canvas × arc42 conforme a aula: 1 e 3 → 1.1; 4 → 1.2; 2 e 7 → 3.1; 5 e 6 → 4 e 5; 8 → 5.6; 9 → 8; 10 → 1.1.3; 11 → 11; 12 → 9.</div>
+</div>
+
+<!-- ===================== 5 ===================== -->
+<h1>5. Visão de Blocos de Construção</h1>
+<p>A visão de blocos refina a solução em níveis de abstração do C4: sistema (seção 3), containers (5.1), componentes (5.2 e 5.3) e código em UML (5.4 e 5.5), além do DER (5.6). As cores seguem a notação C4: <span class="c4legenda"><span style="background:#08427b"></span>Person <span style="background:#1168bd"></span>System <span style="background:#438dd5"></span>Container <span style="background:#85bbf0"></span>Component <span style="background:#999"></span>External</span></p>
+
+<h2>5.1 C4 Nível 2 - Diagrama de Containers</h2>
+<div class="figura">
+<div id="fig-c4-l2"></div>
+<script>
+desenharDiagrama("fig-c4-l2", {
+  W: 688, H: 850,
+  nos: {
+    investidor: { x: 269, y: 14, w: 150, h: 48, t: "Investidor", s: "[Person]", k: "person" },
+    mfeA:  { x: 60,  y: 128, w: 170, h: 52, t: "mfe-ativos", s: "[Container: React remote]", k: "cont" },
+    shell: { x: 259, y: 128, w: 170, h: 52, t: "mfe-shell", s: "[Container: React, MF host]", k: "cont" },
+    mfeC:  { x: 458, y: 128, w: 170, h: 52, t: "mfe-carteira", s: "[Container: React remote]", k: "cont" },
+    gw:    { x: 259, y: 262, w: 170, h: 52, t: "API Gateway", s: "[Container: AWS HTTP API]", k: "cont" },
+    bff:   { x: 259, y: 382, w: 170, h: 52, t: "bff-web", s: "[Container: Node.js / Express]", k: "cont" },
+    msA:   { x: 60,  y: 500, w: 170, h: 52, t: "ms-ativos", s: "[Container: Node.js / Express]", k: "cont" },
+    fn:    { x: 259, y: 500, w: 170, h: 52, t: "fn-simulacao", s: "[Container: Azure Functions]", k: "cont" },
+    msC:   { x: 458, y: 500, w: 170, h: 52, t: "ms-carteira", s: "[Container: Node.js / Express]", k: "cont" },
+    sb:    { x: 259, y: 620, w: 170, h: 52, t: "Azure Service Bus", s: "[Container: tópico investlab-ativos]", k: "cont", forma: "fila" },
+    sql:   { x: 458, y: 620, w: 170, h: 56, t: "Azure SQL Database", s: "[Container: SQL - schema carteira]", k: "cont", forma: "db" },
+    mongo: { x: 60,  y: 770, w: 170, h: 56, t: "MongoDB Atlas", s: "[Container: MongoDB - investlab_ativos]", k: "cont", forma: "db" },
+    fontes:{ x: 259, y: 774, w: 170, h: 52, t: "B3 / CVM / BCB / Tesouro / FGC", s: "[External Systems]", k: "ext" },
+  },
+  grupos: [
+    { x: 40, y: 104, w: 608, h: 96, t: "Azure Static Web Apps" },
+    { x: 40, y: 356, w: 608, h: 340, t: "Azure" },
+  ],
+  arestas: [
+    { de: "investidor", para: "shell", a: "b", b: "t", l: "HTTPS" },
+    { de: "shell", para: "mfeA", a: "l", b: "r", l: "remoteEntry.js", d: true, dy: -12 },
+    { de: "shell", para: "mfeC", a: "r", b: "l", l: "remoteEntry.js", d: true, dy: -12 },
+    { de: "shell", para: "gw", a: "b", b: "t", l: "GET /aggregated-data" },
+    { de: "mfeA", para: "gw", a: "b", b: "l", l: "/api/ativos", f: 0.55 },
+    { de: "mfeC", para: "gw", a: "b", b: "r", l: "/api/carteiras, /api/simulacoes", f: 0.55 },
+    { de: "gw", para: "bff", a: "b", b: "t", l: "proxy HTTP" },
+    { de: "bff", para: "msA", a: "l", b: "t", l: "CRUD ativos", f: 0.45 },
+    { de: "bff", para: "fn", a: "b", b: "t", l: "POST /api/simular" },
+    { de: "bff", para: "msC", a: "r", b: "t", l: "CRUD carteiras", f: 0.45 },
+    { de: "msA", para: "sb", a: "b", b: "l", l: "publica cotacao-atualizada", f: 0.5 },
+    { de: "sb", para: "fn", a: "t", b: "b", l: "entrega (assinatura carteira)" },
+    { de: "fn", para: "msC", a: "r", b: "l", l: "PUT /posicoes/precos" },
+    { de: "msC", para: "sql", a: "b", b: "t", l: "TDS (TLS)" },
+    { de: "msA", para: "mongo", a: "b", b: "t", l: "driver (TLS)", f: 0.3 },
+    { de: "msA", para: "fontes", a: "b", b: "t", l: "coleta (E3)", d: true, f: 0.8 },
+  ],
+  legenda: [["person", "Person"], ["cont", "Container (aplicação, Function, banco, barramento)"], ["ext", "External System"], ["tracejado", "runtime / futuro"]],
+});
+</script>
+<div class="legenda">Figura 3 - C4 Nível 2: containers do InvestLab. Setas contínuas: chamadas síncronas; tracejadas: carregamento em runtime ou integração futura. O único caminho público é Investidor → Static Web Apps → API Gateway. Tecnologias e responsabilidades detalhadas na tabela 5.1.1.</div>
+</div>
+
+<h3>5.1.1 Responsabilidades dos containers</h3>
+<table class="t">
+  <tr><th style="width:17%">Container</th><th style="width:25%">Tecnologia</th><th>Responsabilidade</th><th style="width:18%">Estilo</th></tr>
+  <tr><td>mfe-shell</td><td>React 18, Vite, <code>@originjs/vite-plugin-federation</code> (host), Azure SWA</td><td>Layout, navegação, dashboard (consome <code>/aggregated-data</code>), carregamento dos remotes com <em>error boundary</em>.</td><td>Microfrontend</td></tr>
+  <tr><td>mfe-ativos</td><td>React remote (<code>./App</code>)</td><td>Listar/filtrar/cadastrar ativos (RF03, RF04, RF09) via BFF.</td><td>Microfrontend</td></tr>
+  <tr><td>mfe-carteira</td><td>React remote (<code>./App</code>)</td><td>Criar carteira, registrar aporte, ver posições (RF15) e simular (RF07, RF08) via BFF.</td><td>Microfrontend</td></tr>
+  <tr><td>API Gateway</td><td>AWS API Gateway HTTP API (OpenAPI importado)</td><td>Entrada única; CORS; throttling; autenticação JWT (Entrega 3); proxy para o BFF.</td><td>API Gateway</td></tr>
+  <tr><td>bff-web</td><td>Node.js 22, Express 5, swagger-ui</td><td><code>GET /aggregated-data</code> (agrega ativos + carteiras + simulação em paralelo); proxies <code>/api/ativos</code>, <code>/api/carteiras</code>, <code>/api/simulacoes</code>; degradação graciosa.</td><td>BFF</td></tr>
+  <tr><td>ms-ativos</td><td>Node.js 22, Express 5, driver MongoDB, SDK Service Bus</td><td>CRUD de ativos, atualização de cotação com regra de data de referência, publicação do evento.</td><td>Microservice, Database per Service, EDA (produtor)</td></tr>
+  <tr><td>ms-carteira</td><td>Node.js 22, Express 5, mssql</td><td>Carteiras, posições com preço médio ponderado, transações, patrimônio; endpoint idempotente de reavaliação de preços.</td><td>Microservice, Database per Service, EDA (consumidor final)</td></tr>
+  <tr><td>fn-simulacao</td><td>Azure Functions v4 (Node), plano Consumption</td><td><code>POST /api/simular</code> (RF07/RF08); <code>ServiceBusTopicTrigger</code> que repassa a cotação ao ms-carteira.</td><td>Serverless, EDA (consumidor)</td></tr>
+  <tr><td>Azure Service Bus</td><td>Tópico <code>investlab-ativos</code>, assinatura <code>carteira</code>, dead-letter</td><td>Desacoplar produtor e consumidores; reentrega; DLQ.</td><td>EDA</td></tr>
+  <tr><td>MongoDB Atlas</td><td>M0 (free), base <code>investlab_ativos</code>, coleção <code>ativos</code></td><td>Persistência exclusiva do ms-ativos.</td><td>Database per Service</td></tr>
+  <tr><td>Azure SQL Database</td><td>Free (1 DTU), schema <code>carteira</code></td><td>Persistência exclusiva do ms-carteira.</td><td>Database per Service</td></tr>
+</table>
+
+<h2>5.2 C4 Nível 3 - Componentes do ms-ativos</h2>
+<p>O diagrama mostra a estrutura interna comum a todos os serviços Node (ms-ativos, ms-carteira e, com menos fatias, bff-web): o <em>composition root</em> registra cada fatia vertical; as fatias usam o domínio e as portas; a infraestrutura implementa as portas. As setas de dependência apontam para dentro (Clean Architecture).</p>
+<div class="figura">
+<div id="fig-c4-l3"></div>
+<script>
+desenharDiagrama("fig-c4-l3", {
+  W: 688, H: 640,
+  nos: {
+    api: { x: 259, y: 16, w: 170, h: 54, t: "api/app.ts + server.ts", s: ["[Component: composition root]", "Express, Swagger, erros, injeção"], k: "comp" },
+    f1: { x: 28,  y: 130, w: 118, h: 56, t: "cadastrar-ativo", s: ["endpoint.ts", "handler.ts"], k: "comp" },
+    f2: { x: 158, y: 130, w: 118, h: 56, t: "listar-ativos", s: ["endpoint.ts", "handler.ts"], k: "comp" },
+    f3: { x: 288, y: 130, w: 118, h: 56, t: "obter-ativo", s: ["endpoint.ts", "handler.ts"], k: "comp" },
+    f4: { x: 418, y: 130, w: 118, h: 56, t: "atualizar-cotacao", s: ["endpoint.ts · handler.ts", "publica o evento"], k: "comp" },
+    f5: { x: 548, y: 130, w: 118, h: 56, t: "remover-ativo", s: ["endpoint.ts", "handler.ts"], k: "comp" },
+    p1: { x: 36,  y: 276, w: 148, h: 46, t: "AtivoRepository", s: "«interface»", k: "port" },
+    p2: { x: 196, y: 276, w: 140, h: 46, t: "EventPublisher", s: "«interface»", k: "port" },
+    dom: { x: 400, y: 250, w: 268, h: 84, t: "src/domain", s: ["[Component: Entities]", "Ativo · Dinheiro · TipoDeAtivo", "CotacaoAtualizada · erros"], k: "dom" },
+    i1: { x: 28,  y: 412, w: 152, h: 52, t: "MongoAtivoRepository", s: "mongo/", k: "comp" },
+    i2: { x: 188, y: 412, w: 158, h: 52, t: "InMemoryAtivoRepository", s: "memoria/ (testes, local)", k: "comp" },
+    i3: { x: 352, y: 412, w: 168, h: 52, t: "ServiceBusEventPublisher", s: "mensageria/", k: "comp" },
+    i4: { x: 526, y: 412, w: 132, h: 52, t: "LogEventPublisher", s: "mensageria/ (local)", k: "comp" },
+    mongo: { x: 28, y: 540, w: 152, h: 54, t: "MongoDB Atlas", s: "[External: banco]", k: "ext", forma: "db" },
+    sb: { x: 352, y: 540, w: 168, h: 50, t: "Azure Service Bus", s: "[External: tópico]", k: "ext", forma: "fila" },
+  },
+  grupos: [
+    { id: "FEAT", x: 20, y: 96, w: 648, h: 110, t: "src/features - fatias verticais (use case + interface adapter + teste)" },
+    { id: "APP", x: 20, y: 250, w: 330, h: 84, t: "src/application/ports (Output Ports)" },
+    { id: "INFRA", x: 20, y: 380, w: 648, h: 100, t: "src/infrastructure (Frameworks & Drivers) - escolhidos por variável de ambiente em server.ts" },
+  ],
+  arestas: [
+    { de: "api", para: "FEAT", a: "b", b: "t", l: "registra cada fatia (Router)" },
+    { de: "FEAT", para: "APP", a: "b", b: "t", l: "depende das portas", f: 0.45 },
+    { de: "FEAT", para: "dom", a: "b", b: "t", l: "usa entidades e regras", f: 0.45 },
+    { de: "i1", para: "p1", a: "t", b: "b", l: "implementa", d: true },
+    { de: "i2", para: "p1", a: "t", b: "b", d: true },
+    { de: "i3", para: "p2", a: "t", b: "b", l: "implementa", d: true },
+    { de: "i4", para: "p2", a: "t", b: "b", d: true },
+    { de: "i1", para: "mongo", a: "b", b: "t", l: "driver mongodb (TLS)" },
+    { de: "i3", para: "sb", a: "b", b: "t", l: "@azure/service-bus (AMQP)" },
+  ],
+  legenda: [["comp", "Component"], ["dom", "Entities (domínio)"], ["port", "Porta (interface)"], ["ext", "Externo"], ["tracejado", "implementa"]],
+});
+</script>
+<div class="legenda">Figura 4 - C4 Nível 3: componentes do ms-ativos. As fatias dependem apenas de <code>domain</code> e das portas; <code>infrastructure</code> só implementa portas; <code>api</code> é o único lugar que conhece todos.</div>
+</div>
+
+<h3>5.2.1 Componentes e responsabilidades (ms-ativos e ms-carteira)</h3>
+<table class="t">
+  <tr><th style="width:26%">Componente</th><th>Responsabilidade</th><th style="width:26%">Equivalente no ms-carteira</th></tr>
+  <tr><td><code>domain/Ativo</code>, <code>Dinheiro</code></td><td>Entidade e value object com invariantes (ticker válido, preço &gt; 0, data de referência não retrocede); gera o evento <code>CotacaoAtualizada</code>.</td><td><code>domain/Carteira</code> (agregado), <code>Posicao</code> (preço médio ponderado), <code>Transacao</code></td></tr>
+  <tr><td><code>application/ports/AtivoRepository</code></td><td>Porta de saída de persistência.</td><td><code>CarteiraRepository</code> (inclui <code>listarComAtivo</code> para o consumidor de eventos)</td></tr>
+  <tr><td><code>application/ports/EventPublisher</code></td><td>Porta de saída para o barramento.</td><td>- (o ms-carteira é consumidor, via endpoint)</td></tr>
+  <tr><td><code>features/cadastrar-ativo</code></td><td>POST /ativos; valida com zod, cria entidade, rejeita duplicado (409).</td><td><code>criar-carteira</code> (POST /carteiras)</td></tr>
+  <tr><td><code>features/listar-ativos</code>, <code>obter-ativo</code></td><td>GET /ativos?tipo=, GET /ativos/{ticker}.</td><td><code>listar-carteiras</code>, <code>obter-carteira</code></td></tr>
+  <tr><td><code>features/atualizar-cotacao</code></td><td>PUT /ativos/{ticker}/cotacao; persiste e publica o evento (EDA, produtor).</td><td><code>registrar-aporte</code> (POST /carteiras/{id}/aportes) e <code>atualizar-precos</code> (PUT /posicoes/precos, idempotente - EDA, consumidor)</td></tr>
+  <tr><td><code>features/remover-ativo</code></td><td>DELETE /ativos/{ticker}.</td><td><code>remover-carteira</code></td></tr>
+  <tr><td><code>infrastructure/mongo</code>, <code>mensageria</code>, <code>memoria</code></td><td>Adaptadores: MongoDB Atlas, Service Bus, memória (testes/local), log.</td><td><code>infrastructure/sql/SqlCarteiraRepository</code> (mssql, transação), <code>memoria</code></td></tr>
+  <tr><td><code>api/app.ts</code>, <code>server.ts</code>, <code>openapi.ts</code>, <code>erros.ts</code></td><td>Composition root, seleção de adaptadores por ambiente, Swagger UI em <code>/docs</code>, mapeamento de erros → HTTP.</td><td>idem</td></tr>
+  <tr><td><code>test/arquitetura.test.ts</code></td><td>7 regras de dependência (seção 8.2).</td><td>7 regras</td></tr>
+</table>
+
+<h2>5.3 C4 Nível 3 - Componentes do bff-web e da fn-simulacao</h2>
+<div class="figura">
+<div class="mermaid">
+flowchart LR
+  classDef comp fill:#85bbf0,color:#000,stroke:#5a9bd4
+  classDef port fill:#dfe9f3,color:#000,stroke:#5a9bd4,stroke-dasharray:4 2
+  classDef dom fill:#1168bd,color:#fff,stroke:#0b4a8a
+  classDef ext fill:#999,color:#fff,stroke:#666
+  subgraph BFF["bff-web"]
+    direction LR
+    bapi["<b>api/app.ts</b><br/>[composition root]<br/>CORS, Swagger, erros 502"]:::comp
+    agg["<b>features/aggregated-data</b><br/>AggregatedDataHandler<br/>Promise.allSettled nas 3 fontes"]:::comp
+    px["<b>features/proxy-ativos</b><br/><b>features/proxy-carteiras</b><br/><b>features/simular</b>"]:::comp
+    bp["«interfaces»<br/>AtivosClient, CarteiraClient,<br/>SimulacaoClient"]:::port
+    bh["<b>infrastructure/http/clientesHttp</b><br/>fetch + timeout 5 s"]:::comp
+    bapi --> agg & px
+    agg --> bp
+    px --> bp
+    bh -. implementa .-> bp
+    bapi -. injeta .-> bh
+  end
+  subgraph FN["fn-simulacao (Azure Functions)"]
+    direction LR
+    fsim["<b>functions/simular.ts</b><br/>[HTTP trigger POST /api/simular]"]:::comp
+    fev["<b>functions/cotacaoAtualizada.ts</b><br/>[ServiceBusTopicTrigger]"]:::comp
+    fdom["<b>domain/Simulador</b><br/>[Entities: função pura]<br/>taxaMensal, projetar, simular"]:::dom
+    fsim --> fdom
+  end
+  msA["ms-ativos"]:::ext
+  msC["ms-carteira"]:::ext
+  sb[["Service Bus"]]:::ext
+  bh --> msA & msC & fsim
+  sb --> fev
+  fev -- "PUT /posicoes/precos" --> msC
+</div>
+<div class="legenda">Figura 5 - C4 Nível 3: componentes do bff-web (portas para os upstreams) e da fn-simulacao (domínio puro isolado do SDK do Azure).</div>
+</div>
+
+<h2>5.4 C4 Nível 4 - UML de componentes</h2>
+<p>O diagrama de componentes UML detalha os contratos (interfaces) entre as fatias e os adaptadores do ms-ativos, evidenciando a <strong>inversão de dependência</strong>: casos de uso dependem de interfaces; adaptadores as realizam.</p>
+<div class="figura">
+<div class="mermaid">
+flowchart LR
+  classDef c fill:#fff,stroke:#1168bd,color:#000
+  classDef i fill:#fff,stroke:#1168bd,color:#000,stroke-dasharray:4 2
+  EP["«component»<br/>cadastrar-ativo / endpoint<br/>(Express Router)"]:::c
+  H["«component»<br/>CadastrarAtivoHandler<br/>«use case»"]:::c
+  H2["«component»<br/>AtualizarCotacaoHandler<br/>«use case»"]:::c
+  EP2["«component»<br/>atualizar-cotacao / endpoint"]:::c
+  D["«component»<br/>domain<br/>Ativo · Dinheiro · eventos"]:::c
+  IR(("AtivoRepository")):::i
+  IE(("EventPublisher")):::i
+  M["«component»<br/>MongoAtivoRepository"]:::c
+  S["«component»<br/>ServiceBusEventPublisher"]:::c
+  EP -- "usa" --> H
+  EP2 -- "usa" --> H2
+  H -- "usa" --> D
+  H2 -- "usa" --> D
+  H -- "requer" --> IR
+  H2 -- "requer" --> IR
+  H2 -- "requer" --> IE
+  M -. "realiza" .-> IR
+  S -. "realiza" .-> IE
+  M -- "«driver» mongodb" --> DB[("MongoDB Atlas")]
+  S -- "«sdk» @azure/service-bus" --> SB[["Service Bus"]]
+</div>
+<div class="legenda">Figura 6 - UML: diagrama de componentes do ms-ativos (interfaces como lollipops; linhas tracejadas = realização). Mesmo padrão em ms-carteira (CarteiraRepository ← SqlCarteiraRepository) e bff-web (AtivosClient/CarteiraClient/SimulacaoClient ← clientes HTTP).</div>
+</div>
+
+<h2>5.5 C4 Nível 4 - UML de classes</h2>
+<p>As classes representam o núcleo do domínio de cada microserviço e da Function, exatamente como implementadas em <code>src/domain</code>. Não há dependência entre os domínios dos dois microserviços; o acoplamento é apenas pelo contrato do evento (DTO <code>CotacaoAtualizada</code>).</p>
+<div class="figura">
+<div class="mermaid">
+classDiagram
+  direction LR
+  class Ativo {
+    -props: AtivoProps
+    +ticker: string
+    +tipo: TipoDeAtivo
+    +nome: string
+    +preco: Dinheiro
+    +dataReferencia: Date
+    +criar(entrada)$ Ativo
+    +reidratar(props)$ Ativo
+    +atualizarCotacao(precoCentavos, data) CotacaoAtualizada
+    +paraSnapshot()
+  }
+  class Dinheiro {
+    +centavos: number
+    +deCentavos(c)$ Dinheiro
+    +reais: number
+    +maiorQue(outro) bool
+  }
+  class TipoDeAtivo {
+    &lt;&lt;enumeration&gt;&gt;
+    FII
+    ACAO
+    TESOURO
+    CDB
+    LCI
+    LCA
+  }
+  class CotacaoAtualizada {
+    &lt;&lt;event DTO v1&gt;&gt;
+    +tipo: investlab.ativos.cotacao-atualizada
+    +versao: 1
+    +ocorridoEm: string
+    +dados: ticker, precoAnterior, preco, dataReferencia
+  }
+  class AtivoRepository {
+    &lt;&lt;interface&gt;&gt;
+    +salvar(ativo)
+    +obterPorTicker(ticker)
+    +listar(filtro)
+    +remover(ticker)
+  }
+  class EventPublisher {
+    &lt;&lt;interface&gt;&gt;
+    +publicar(evento)
+  }
+  class AtualizarCotacaoHandler {
+    &lt;&lt;use case&gt;&gt;
+    +executar(comando)
+  }
+  Ativo --> Dinheiro : preco
+  Ativo --> TipoDeAtivo : tipo
+  Ativo ..> CotacaoAtualizada : cria
+  AtualizarCotacaoHandler --> AtivoRepository
+  AtualizarCotacaoHandler --> EventPublisher
+  AtualizarCotacaoHandler ..> Ativo
+</div>
+<div class="legenda">Figura 7 - UML: diagrama de classes do domínio do ms-ativos (<code>src/domain</code>) e das portas usadas pelo caso de uso de atualização de cotação.</div>
+</div>
+<div class="figura">
+<div class="mermaid">
+classDiagram
+  direction LR
+  class Carteira {
+    &lt;&lt;aggregate root&gt;&gt;
+    +id: string
+    +usuarioId: string
+    +nome: string
+    +posicoes: Posicao[]
+    +historico: Transacao[]
+    +criar(entrada)$ Carteira
+    +registrarAporte(entrada) Transacao
+    +atualizarPreco(ticker, precoCentavos) bool
+    +patrimonioCentavos: number
+    +investidoCentavos: number
+  }
+  class Posicao {
+    &lt;&lt;value object&gt;&gt;
+    +ticker: string
+    +quantidade: number
+    +precoMedioCentavos: number
+    +precoAtualCentavos: number
+    +nova(ticker, qtd, preco)$ Posicao
+    +comAporte(qtd, preco) Posicao
+    +comPrecoAtual(preco) Posicao
+    +valorAtualCentavos: number
+  }
+  class Transacao {
+    +id: string
+    +ticker: string
+    +quantidade: number
+    +precoCentavos: number
+    +data: Date
+  }
+  class CarteiraRepository {
+    &lt;&lt;interface&gt;&gt;
+    +salvar(carteira)
+    +obterPorId(id)
+    +listarPorUsuario(usuarioId)
+    +listarComAtivo(ticker)
+    +remover(id)
+  }
+  class Simulador {
+    &lt;&lt;module fn-simulacao&gt;&gt;
+    +validarParametros(p) string
+    +taxaMensal(taxaAnual) number
+    +projetar(p, taxaAnual) Cenario
+    +simular(p, data) ResultadoSimulacao
+  }
+  class Cenario {
+    +nome: conservador | base | otimista
+    +taxaAnualPercentual: number
+    +patrimonioFinalCentavos: number
+    +totalAportadoCentavos: number
+    +rendimentoCentavos: number
+    +serieAnual: Ponto[]
+  }
+  Carteira "1" *-- "0..*" Posicao
+  Carteira "1" *-- "0..*" Transacao
+  CarteiraRepository ..> Carteira
+  Simulador ..> Cenario : produz
+</div>
+<div class="legenda">Figura 8 - UML: diagrama de classes dos domínios do ms-carteira e da fn-simulacao. Não há dependência de código entre os domínios: o acoplamento com o ms-ativos é apenas pelo contrato do evento <code>CotacaoAtualizada</code>, consumido de forma assíncrona (ver Figura 11).</div>
+</div>
+
+<h2>5.6 Diagrama de Entidades e Relacionamentos</h2>
+<p>Com Database per Service há dois modelos físicos independentes, mostrados separadamente. O ms-ativos armazena documentos no MongoDB Atlas (base <code>investlab_ativos</code>); o ms-carteira usa o schema relacional <code>carteira</code> no Azure SQL (<code>sql/schema.sql</code>). As entidades marcadas como <strong>implementada</strong> existem no código desta entrega; as marcadas como <strong>prevista</strong> vêm do modelo de dados da Entrega 1 e estão posicionadas na base do serviço que será dono delas (seção 11.1). <strong>Não existe chave estrangeira entre as bases</strong>: <code>POSICAO.Ticker</code> e <code>HISTORICO_PRECO.ticker</code> referenciam um ativo apenas logicamente, e a consistência entre serviços é mantida pelo evento de cotação.</p>
+<div class="figura">
+<div class="mermaid">
+erDiagram
+  ATIVO {
+    string _id PK "ticker - implementada"
+    string tipo "FII|ACAO|TESOURO|CDB|LCI|LCA (índice)"
+    string nome
+    bigint precoCentavos
+    date dataReferencia
+    string emissor "prevista"
+  }
+  HISTORICO_PRECO {
+    objectId _id PK "prevista"
+    string ticker FK "ref. lógica ATIVO"
+    date dataReferencia
+    bigint precoCentavos
+  }
+  PROVENTO {
+    objectId _id PK "prevista"
+    string ticker FK "ref. lógica ATIVO"
+    date dataPagamento
+    bigint valorCentavos
+  }
+  INSTITUICAO {
+    objectId _id PK "prevista"
+    string nome
+    string conglomerado "cobertura FGC"
+  }
+  OFERTA_RENDA_FIXA {
+    objectId _id PK "prevista"
+    objectId instituicaoId FK
+    string tipoProduto "CDB|LCI|LCA"
+    decimal taxa
+    string indexador
+    string liquidez
+    date vencimento
+  }
+  ATIVO ||--o{ HISTORICO_PRECO : "possui série (coleção própria)"
+  ATIVO ||--o{ PROVENTO : "paga"
+  INSTITUICAO ||--o{ OFERTA_RENDA_FIXA : "emite"
+</div>
+<div class="legenda">Figura 9 - DER da base do ms-ativos (MongoDB Atlas, <code>investlab_ativos</code>): coleção <code>ativos</code> implementada; <code>historico_precos</code>, <code>proventos</code>, <code>instituicoes</code> e <code>ofertas_renda_fixa</code> previstas (RF04, RF09-RF13), herdadas do modelo da Entrega 1.</div>
+</div>
+<div class="figura">
+<div class="mermaid">
+erDiagram
+  PERFIL_USUARIO {
+    nvarchar UsuarioId PK "prevista - vem do JWT (E3)"
+    bigint CapitalInicialCentavos
+    bigint AporteMensalCentavos
+    int HorizonteAnos
+    nvarchar Objetivo
+  }
+  CARTEIRA {
+    uniqueidentifier Id PK "implementada"
+    nvarchar UsuarioId FK "índice IX_Carteira_Usuario"
+    nvarchar Nome
+    datetime2 AtualizadaEm
+  }
+  POSICAO {
+    uniqueidentifier CarteiraId PK, FK "implementada"
+    nvarchar Ticker PK "ref. lógica ATIVO (outra base)"
+    decimal Quantidade "18,6"
+    bigint PrecoMedioCentavos
+    bigint PrecoAtualCentavos
+  }
+  TRANSACAO {
+    uniqueidentifier Id PK "implementada"
+    uniqueidentifier CarteiraId FK
+    nvarchar Ticker
+    decimal Quantidade "18,6"
+    bigint PrecoCentavos
+    datetime2 Data
+  }
+  SIMULACAO {
+    uniqueidentifier Id PK "prevista"
+    nvarchar UsuarioId FK
+    datetime2 CriadaEm
+    int Meses
+    decimal TaxaAnualPercentual
+    datetime2 DataReferencia "premissas (ADR-06)"
+  }
+  CENARIO_SIMULACAO {
+    uniqueidentifier Id PK "prevista"
+    uniqueidentifier SimulacaoId FK
+    nvarchar Nome "conservador|base|otimista"
+    bigint PatrimonioFinalCentavos
+    bigint RendimentoCentavos
+  }
+  PERFIL_USUARIO ||--o{ CARTEIRA : "possui"
+  PERFIL_USUARIO ||--o{ SIMULACAO : "executa"
+  CARTEIRA ||--o{ POSICAO : "possui (ON DELETE CASCADE)"
+  CARTEIRA ||--o{ TRANSACAO : "registra (ON DELETE CASCADE)"
+  SIMULACAO ||--o{ CENARIO_SIMULACAO : "gera"
+</div>
+<div class="legenda">Figura 10 - DER da base do ms-carteira (Azure SQL, schema <code>carteira</code>): <code>Carteira</code>, <code>Posicao</code> e <code>Transacao</code> implementadas (<code>sql/schema.sql</code>); <code>PerfilUsuario</code>, <code>Simulacao</code> e <code>CenarioSimulacao</code> previstas (RF02, RF07, RF08) para persistir premissas e resultados das simulações que hoje a fn-simulacao calcula sem armazenar.</div>
+</div>
+
+<h2>5.7 Rastreabilidade entre níveis</h2>
+<table class="t">
+  <tr><th style="width:26%">Vista</th><th>Foco</th><th style="width:20%">Localização</th></tr>
+  <tr><td>C4 Nível 1</td><td>InvestLab + investidor + sistemas externos</td><td>Seção 3.1.1 (Fig. 1)</td></tr>
+  <tr><td>C4 Nível 2</td><td>Microfrontends, gateway, BFF, microserviços, Function, barramento, bancos</td><td>Seção 5.1 (Fig. 3)</td></tr>
+  <tr><td>C4 Nível 3</td><td>Componentes do ms-ativos; do bff-web e da fn-simulacao</td><td>Seções 5.2 e 5.3 (Figs. 4 e 5)</td></tr>
+  <tr><td>C4 Nível 4 - Componentes UML</td><td>Interfaces (portas) e realizações (adaptadores)</td><td>Seção 5.4 (Fig. 6)</td></tr>
+  <tr><td>C4 Nível 4 - Classes UML</td><td>Domínios dos serviços e da Function</td><td>Seção 5.5 (Figs. 7 e 8)</td></tr>
+  <tr><td>C4 Nível 4 - Sequência UML</td><td>Fluxo de eventos (cotação) e agregação (dashboard)</td><td>Seção 6 (Figs. 11 e 12)</td></tr>
+  <tr><td>DER</td><td>Persistência por serviço</td><td>Seção 5.6 (Figs. 9 e 10)</td></tr>
+  <tr><td>Implantação</td><td>Azure, AWS, Atlas, Docker Hub, GitHub</td><td>Seção 7 (Fig. 13)</td></tr>
+  <tr><td>Clean Architecture / Vertical Slice</td><td>Regra das dependências e estrutura de pastas</td><td>Seção 8.1 (Fig. 14)</td></tr>
+</table>
+
+<!-- ===================== 6 ===================== -->
+<h1>6. Visão de Runtime</h1>
+<p>A visão de runtime descreve como os blocos colaboram em cenários relevantes. Os dois cenários principais exercitam, respectivamente, a <strong>arquitetura orientada a eventos</strong> (atualização de cotação propagada para as carteiras) e o <strong>BFF</strong> (agregação do dashboard). Ambos foram executados ponta a ponta no ambiente local durante a construção desta entrega.</p>
+
+<h2>6.1 Cenário: atualizar cotação e reavaliar carteiras (EDA)</h2>
+<ul>
+  <li>Um operador (ou o job de coleta da Entrega 3) envia a nova cotação pelo gateway.</li>
+  <li>O BFF encaminha ao ms-ativos; a entidade valida que a data de referência não retrocede.</li>
+  <li>O ms-ativos persiste no MongoDB e publica <code>cotacao-atualizada</code> no tópico.</li>
+  <li>A Function com <code>ServiceBusTopicTrigger</code> consome e chama <code>PUT /posicoes/precos</code> no ms-carteira.</li>
+  <li>O ms-carteira atualiza as posições afetadas (idempotente) e persiste no Azure SQL.</li>
+  <li>Em caso de falha, o Service Bus reentrega; após as tentativas, a mensagem vai para a dead-letter.</li>
+</ul>
+<div class="figura paisagem">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant GW as Gateway
+  participant BFF as BFF
+  participant MSA as ms-ativos
+  participant SB as Service Bus
+  participant FN as fn-simulacao
+  participant MSC as ms-carteira
+  GW->>BFF: PUT /api/ativos/{ticker}/cotacao
+  BFF->>MSA: PUT /ativos/{ticker}/cotacao
+  MSA->>MSA: obterPorTicker (MongoDB)
+  MSA->>MSA: atualizarCotacao() valida data
+  MSA->>MSA: salvar (MongoDB)
+  MSA->>SB: publicar(cotacao-atualizada v1)
+  MSA-->>BFF: 200 ativo
+  BFF-->>GW: 200
+  SB-->>FN: entrega (assinatura carteira)
+  FN->>MSC: PUT /posicoes/precos
+  MSC->>MSC: listarComAtivo (SQL)
+  MSC->>MSC: atualizarPreco() idempotente
+  MSC->>MSC: salvar (SQL, transação)
+  MSC-->>FN: 200 carteirasAtualizadas
+  FN-->>SB: complete | abandon → reentrega → DLQ
+</div>
+<div class="legenda">Figura 11 - UML: diagrama de sequência da atualização de cotação. Os passos 1-8 são síncronos; 9-15 são assíncronos (consistência eventual). A persistência em MongoDB e Azure SQL está indicada como auto-mensagens.</div>
+</div>
+
+<h2>6.2 Cenário: carregar o dashboard agregado (BFF)</h2>
+<div class="figura paisagem">
+<div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant SH as mfe-shell
+  participant GW as Gateway
+  participant BFF as BFF
+  participant MSA as ms-ativos
+  participant MSC as ms-carteira
+  participant FN as fn-simulacao
+  SH->>GW: GET /aggregated-data?usuarioId
+  GW->>BFF: proxy
+  par Promise.allSettled
+    BFF->>MSA: GET /ativos
+    MSA-->>BFF: [ativos]
+  and
+    BFF->>MSC: GET /carteiras?usuarioId
+    MSC-->>BFF: [carteiras]
+  end
+  BFF->>BFF: patrimônio = soma das carteiras
+  BFF->>FN: POST /api/simular (capital = patrimônio)
+  FN-->>BFF: cenários
+  Note over BFF: fonte indisponível → null + fontes.x = rejected
+  BFF-->>GW: 200 JSON único
+  GW-->>SH: 200
+</div>
+<div class="legenda">Figura 12 - UML: diagrama de sequência do <code>GET /aggregated-data</code>. O BFF reduz três chamadas do cliente a uma e degrada graciosamente.</div>
+</div>
+
+<h2>6.3 Outros runtimes relevantes</h2>
+<table class="t">
+  <tr><th style="width:22%">Cenário</th><th>Cadeia principal</th><th style="width:30%">Resultado</th></tr>
+  <tr><td>Cadastrar ativo</td><td>mfe-ativos → Gateway → BFF (proxy) → ms-ativos <code>cadastrar-ativo</code> → MongoDB</td><td>201 com <code>Location</code>; 409 se ticker existe; 422 se regra de domínio falha.</td></tr>
+  <tr><td>Registrar aporte</td><td>mfe-carteira → Gateway → BFF → ms-carteira <code>registrar-aporte</code> → Azure SQL (transação)</td><td>Posição com preço médio recalculado; transação guardada para rastreabilidade (Q07).</td></tr>
+  <tr><td>Simular patrimônio</td><td>mfe-carteira → Gateway → BFF <code>/api/simulacoes</code> → fn-simulacao HTTP → <code>Simulador.simular</code></td><td>Três cenários em centavos inteiros, determinísticos (Q01).</td></tr>
+  <tr><td>Carregar remote</td><td>mfe-shell → <code>remoteEntry.js</code> do remote (SWA)</td><td>Falha do remote é contida por <em>error boundary</em>; o shell continua.</td></tr>
+  <tr><td>Fonte externa indisponível</td><td>Coleta falha → <code>atualizar-cotacao</code> não é chamada</td><td>Última base válida permanece; <code>dataReferencia</code> informa ao usuário (Q05).</td></tr>
+  <tr><td>Mensagem inválida no tópico</td><td>Trigger → <code>zod.parse</code> lança → abandon → reentregas → dead-letter</td><td>Mensagem isolada para análise; demais mensagens seguem.</td></tr>
+  <tr><td>Inicialização de um serviço</td><td><code>server.ts</code> lê variáveis de ambiente → escolhe adaptadores (Mongo/SQL/Service Bus ou memória/log) → registra fatias → Swagger</td><td>Mesmo binário roda local e em nuvem; nenhum segredo no código.</td></tr>
+</table>
+
+<!-- ===================== 7 ===================== -->
+<h1>7. Visão de Implantação</h1>
+<p>A implantação usa os serviços gratuitos disponíveis à equipe (Azure for Students, MongoDB Atlas M0, AWS Free Tier, Docker Hub e GitHub). O gateway fica na AWS por exigência do enunciado da Entrega 3; o restante fica no Azure, onde já foram exercitados Functions, Static Web Apps e Service Bus nas atividades formativas.</p>
+<div class="figura paisagem">
+<div class="mermaid">
+flowchart LR
+  classDef node fill:#f7f9fb,stroke:#5b6770,color:#000
+  classDef art fill:#438dd5,color:#fff,stroke:#2e6295
+  classDef ext fill:#999,color:#fff,stroke:#666
+  subgraph DEV["Navegador do investidor"]
+    br["mfe-shell + remotes (ES modules)"]:::art
+  end
+  subgraph AZSWA["Azure Static Web Apps"]
+    swa1["mfe-shell<br/>(host)"]:::art
+    swa2["mfe-ativos<br/>remoteEntry.js"]:::art
+    swa3["mfe-carteira<br/>remoteEntry.js"]:::art
+  end
+  subgraph AWS["AWS"]
+    apigw["API Gateway HTTP API<br/>CORS · throttling · JWT (E3)"]:::art
+  end
+  subgraph AZ["Azure"]
+    subgraph ACA["Azure Container Apps"]
+      c1["bff-web<br/>imagem Docker Hub"]:::art
+      c2["ms-ativos<br/>imagem Docker Hub"]:::art
+      c3["ms-carteira<br/>imagem Docker Hub"]:::art
+    end
+    fnapp["Function App (Consumption, Node 22)<br/>fn-simulacao"]:::art
+    sbus[["Service Bus (Standard)<br/>tópico investlab-ativos<br/>assinatura carteira + DLQ"]]:::art
+    asql[("Azure SQL Database<br/>Free offer (1 DTU)")]:::art
+    kv["Configuração / segredos<br/>(App Settings; Key Vault na E3)"]:::node
+  end
+  atlas[("MongoDB Atlas M0<br/>investlab_ativos")]:::ext
+  subgraph CI["GitHub + Docker Hub"]
+    gh["GitHub Actions<br/>npm test (unitários + arquitetura) · build"]:::node
+    hub["Docker Hub<br/>investlab-bff-web:v1 · investlab-ms-ativos:v1 · investlab-ms-carteira:v1"]:::node
+  end
+  br -- HTTPS --> swa1
+  swa1 -. carrega .-> swa2 & swa3
+  br -- HTTPS --> apigw
+  apigw -- HTTPS --> c1
+  c1 --> c2 & c3 & fnapp
+  c2 -- TLS --> atlas
+  c3 -- TLS --> asql
+  c2 -- AMQP --> sbus
+  sbus --> fnapp
+  fnapp --> c3
+  gh -- "docker push" --> hub
+  hub -- "pull" --> ACA
+  gh -- "deploy SWA / func publish" --> AZSWA & fnapp
+  kv -. "variáveis de ambiente" .-> ACA & fnapp
+</div>
+<div class="legenda">Figura 13 - Visão de implantação. Os três microfrontends são aplicações separadas no Static Web Apps; os três serviços Node rodam como containers a partir das imagens publicadas no Docker Hub; a Function roda no plano Consumption.</div>
+</div>
+
+<h2>7.1 Elementos de infraestrutura</h2>
+<table class="t">
+  <tr><th style="width:22%">Elemento</th><th style="width:22%">Serviço / plano</th><th>O que executa</th><th style="width:24%">Limites relevantes</th></tr>
+  <tr><td>Static Web Apps</td><td>Azure, Free</td><td>mfe-shell, mfe-ativos, mfe-carteira (build Vite, deploy por GitHub Actions)</td><td>100 GB/mês de banda; sem SLA</td></tr>
+  <tr><td>API Gateway</td><td>AWS HTTP API, Free Tier</td><td>Rotas <code>/aggregated-data</code>, <code>/api/{proxy+}</code>, <code>/health</code> → BFF</td><td>1 M req/mês grátis (12 meses)</td></tr>
+  <tr><td>Container Apps</td><td>Azure, Consumption</td><td>bff-web (:3000), ms-ativos (:3001), ms-carteira (:3002) - imagens do Docker Hub</td><td>Scale-to-zero; cold start ~segundos</td></tr>
+  <tr><td>Function App</td><td>Azure Functions, Consumption, Node 22</td><td>fn-simulacao: HTTP <code>simular</code> e trigger <code>cotacaoAtualizada</code></td><td>1 M execuções/mês; cold start</td></tr>
+  <tr><td>Service Bus</td><td>Azure, Standard (tópicos exigem Standard)</td><td>Tópico <code>investlab-ativos</code>, assinatura <code>carteira</code>, dead-letter</td><td>Custo base mensal baixo; 12,5 M operações</td></tr>
+  <tr><td>Azure SQL Database</td><td>Azure, Free offer</td><td>Schema <code>carteira</code> (3 tabelas)</td><td>1 DTU; 32 GB; pausa automática</td></tr>
+  <tr><td>MongoDB Atlas</td><td>M0 Free</td><td>Base <code>investlab_ativos</code>, coleção <code>ativos</code></td><td>512 MB; conexões limitadas</td></tr>
+  <tr><td>Docker Hub / GitHub</td><td>Público</td><td>Imagens versionadas; código, Actions e Dependabot</td><td>Nenhum segredo nos artefatos</td></tr>
+</table>
+
+<h2>7.2 Mapeamento de blocos e configuração</h2>
+<table class="t">
+  <tr><th style="width:18%">Bloco</th><th style="width:28%">Infraestrutura</th><th>Variáveis de ambiente (valores nunca versionados)</th></tr>
+  <tr><td>mfe-*</td><td>Static Web Apps</td><td><code>VITE_BFF_URL</code> (URL do gateway), <code>VITE_MFE_ATIVOS_URL</code>, <code>VITE_MFE_CARTEIRA_URL</code></td></tr>
+  <tr><td>bff-web</td><td>Container Apps</td><td><code>MS_ATIVOS_URL</code>, <code>MS_CARTEIRA_URL</code>, <code>FN_SIMULACAO_URL</code>, <code>FN_SIMULACAO_KEY</code>, <code>CORS_ORIGINS</code></td></tr>
+  <tr><td>ms-ativos</td><td>Container Apps + Atlas + Service Bus</td><td><code>MONGODB_URI</code>, <code>SERVICEBUS_CONNECTION</code>, <code>SERVICEBUS_TOPICO</code></td></tr>
+  <tr><td>ms-carteira</td><td>Container Apps + Azure SQL</td><td><code>AZURE_SQL_CONNECTION</code></td></tr>
+  <tr><td>fn-simulacao</td><td>Function App + Service Bus</td><td><code>SERVICEBUS_CONNECTION</code>, <code>SERVICEBUS_TOPICO</code>, <code>SERVICEBUS_ASSINATURA</code>, <code>MS_CARTEIRA_URL</code></td></tr>
+</table>
+<p>Ambiente local: <code>docker-compose.yml</code> sobe MongoDB, Azure SQL Edge, os dois microserviços e o BFF; sem variáveis, os serviços usam repositórios em memória e publicação de eventos em log, o que permite demonstrar o fluxo completo sem custos.</p>
+
+<!-- ===================== 8 ===================== -->
+<h1>8. Conceitos Transversais</h1>
+
+<h2>8.1 Clean Architecture + Vertical Slice</h2>
+<p>Cada container Node segue a mesma organização. A <strong>Clean Architecture</strong> define as camadas e a regra das dependências (código aponta para dentro, em direção às regras de negócio); a <strong>Vertical Slice Architecture</strong> define que cada caso de uso é uma pasta autocontida em <code>src/features</code>, com endpoint (adaptador de entrada), handler (caso de uso) e teste. Frameworks (Express, zod), drivers (MongoDB, mssql, Service Bus) e o SDK do Azure Functions ficam nas bordas.</p>
+<div class="figura">
+<div id="fig-clean"></div>
+<script>
+(function () {
+  const aneis = [
+    { x: 20, y: 20, w: 440, h: 360, fill: "#dfe9f3", cor: "#1c2430", t: "Frameworks & Drivers", s: "src/api (Express, Swagger, server.ts) · src/infrastructure (MongoDB, mssql, Service Bus, memória)" },
+    { x: 50, y: 72, w: 380, h: 256, fill: "#b9d4ee", cor: "#1c2430", t: "Interface Adapters", s: "src/features/*/endpoint.ts (HTTP → comando, zod) · src/api/erros.ts (erro → HTTP)" },
+    { x: 80, y: 124, w: 320, h: 152, fill: "#85bbf0", cor: "#0b1f33", t: "Use Cases", s: "src/features/*/handler.ts · src/application/ports («interfaces»)" },
+    { x: 110, y: 176, w: 260, h: 56, fill: "#1168bd", cor: "#fff", t: "Entities", s: "src/domain: Ativo · Carteira · Posicao · Simulador" },
+  ];
+  const esc = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 688 400" width="688" height="400" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="seta-clean" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1c2430"/></marker></defs>`;
+  for (const a of aneis) {
+    svg += `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="14" fill="${a.fill}" stroke="#2e6295"/>
+    <text x="${a.x + a.w / 2}" y="${a.y + 18}" font-size="11.5" font-weight="700" fill="${a.cor}" text-anchor="middle">${esc(a.t)}</text>
+    <text x="${a.x + a.w / 2}" y="${a.y + 32}" font-size="8.6" fill="${a.cor}" text-anchor="middle">${esc(a.s)}</text>`;
+  }
+  svg += `<line x1="240" y1="372" x2="240" y2="240" stroke="#1c2430" stroke-width="1.6" marker-end="url(#seta-clean)"/>
+  <text x="240" y="366" font-size="8.6" fill="#1c2430" text-anchor="middle" style="paint-order:stroke;stroke:#dfe9f3;stroke-width:4px">dependências apontam para dentro</text>`;
+  const regras = [
+    ["api/app.ts", "→ features/*/endpoint.ts"],
+    ["endpoint.ts", "→ handler.ts (comando validado)"],
+    ["handler.ts", "→ domain + application/ports"],
+    ["infrastructure/*", "⇢ implementa application/ports"],
+    ["domain", "→ nada (sem express, zod, drivers)"],
+    ["fatia A", "✗ fatia B (isolamento)"],
+    ["todo o grafo", "✗ ciclos"],
+  ];
+  svg += `<rect x="480" y="20" width="188" height="360" rx="6" fill="#f7f9fb" stroke="#5b6770"/>
+  <text x="574" y="42" font-size="11" font-weight="700" fill="#0b3d5c" text-anchor="middle">Regra das dependências</text>
+  <text x="574" y="56" font-size="8.6" fill="#4a5560" text-anchor="middle">(verificada por tsarch no CI)</text>`;
+  regras.forEach(([a, b], i) => {
+    const y = 84 + i * 40;
+    svg += `<text x="490" y="${y}" font-size="9.2" font-weight="700" fill="#1c2430">${esc(a)}</text><text x="490" y="${y + 13}" font-size="8.8" fill="#1c2430">${esc(b)}</text>`;
+  });
+  svg += `<text x="574" y="372" font-size="8.6" fill="#4a5560" text-anchor="middle">test/arquitetura.test.ts em cada serviço</text></svg>`;
+  document.getElementById("fig-clean").innerHTML = svg;
+})();
+</script>
+<div class="legenda">Figura 14 - Regra das dependências da Clean Architecture aplicada à estrutura de pastas de cada serviço (anéis concêntricos) e as regras que o teste de arquitetura impõe. Nenhuma seta sai de <code>domain</code>; <code>features</code> nunca aponta para <code>infrastructure</code>.</div>
+</div>
+<pre class="codigo">services/ms-ativos/
+├── src/
+│   ├── domain/                Ativo.ts · Dinheiro.ts · eventos.ts · erros.ts   (Entities, sem imports externos)
+│   ├── application/ports/     AtivoRepository.ts · EventPublisher.ts          (Output Ports)
+│   ├── features/              uma fatia vertical por caso de uso
+│   │   ├── cadastrar-ativo/   endpoint.ts · handler.ts · handler.test.ts
+│   │   ├── listar-ativos/     endpoint.ts · handler.ts · handler.test.ts
+│   │   ├── obter-ativo/       …
+│   │   ├── atualizar-cotacao/ … (publica o evento)
+│   │   └── remover-ativo/     …
+│   ├── infrastructure/        mongo/ · mensageria/ · memoria/  (adaptadores que implementam as portas)
+│   └── api/                   app.ts (composition root) · server.ts · openapi.ts · erros.ts
+├── test/arquitetura.test.ts   regras tsarch (estilo ArchUnit)
+└── Dockerfile · package.json · tsconfig.json · vitest.config.ts</pre>
+<p>Aplicação dos princípios SOLID vistos em aula: <strong>SRP</strong> (endpoint só traduz HTTP; handler só coordena; entidade só protege invariantes), <strong>OCP</strong> (nova funcionalidade = nova pasta em <code>features</code>, registrada no composition root), <strong>LSP</strong> (<code>InMemoryAtivoRepository</code> e <code>MongoAtivoRepository</code> são intercambiáveis nos testes e no runtime), <strong>ISP</strong> (portas pequenas por capacidade: <code>EventPublisher</code> separado de <code>AtivoRepository</code>), <strong>DIP</strong> (handlers recebem interfaces pelo construtor; adaptadores dependem das portas).</p>
+
+<h2>8.2 Testes unitários de arquitetura</h2>
+<p>Cada serviço possui <code>test/arquitetura.test.ts</code> executado junto com os testes unitários (<code>npm test</code>) e no CI. A biblioteca <code>tsarch</code> (equivalente ao ArchUnit/ArchUnitNET apresentados em aula, para TypeScript) analisa o grafo de imports e falha o build se uma regra for violada. A verificação negativa foi feita: um import de <code>infrastructure</code> dentro de <code>domain</code> faz a suíte falhar.</p>
+<table class="t">
+  <tr><th style="width:36%">Regra</th><th>O que garante</th><th style="width:22%">Serviços</th></tr>
+  <tr><td><code>domain</code> não depende de <code>application|features|infrastructure|api</code></td><td>Entidades isoladas (anel interno)</td><td>ms-ativos, ms-carteira, fn-simulacao</td></tr>
+  <tr><td><code>domain</code> não depende de <code>express|mongodb|mssql|@azure|zod</code></td><td>Regras de negócio sem frameworks/drivers</td><td>ms-ativos, ms-carteira, fn-simulacao</td></tr>
+  <tr><td><code>application</code> depende apenas de <code>domain</code></td><td>Portas estáveis</td><td>ms-ativos, ms-carteira, bff-web</td></tr>
+  <tr><td><code>features</code> não dependem de <code>infrastructure|api</code></td><td>Casos de uso dependem de abstrações (DIP)</td><td>ms-ativos, ms-carteira, bff-web</td></tr>
+  <tr><td>Fatia não depende de outra fatia</td><td>Isolamento das vertical slices</td><td>ms-ativos (5 fatias), ms-carteira (6 fatias)</td></tr>
+  <tr><td><code>infrastructure</code> não depende de <code>features|api</code></td><td>Adaptadores só implementam portas</td><td>ms-ativos, ms-carteira</td></tr>
+  <tr><td>BFF não importa drivers de banco</td><td>BFF sem banco (padrão BFF + Database per Service)</td><td>bff-web</td></tr>
+  <tr><td>Grafo livre de ciclos</td><td>Modularidade</td><td>todos</td></tr>
+</table>
+<pre class="codigo">// services/ms-ativos/test/arquitetura.test.ts (trecho)
+it("features (casos de uso e endpoints) não dependem de infrastructure nem de api", async () => {
+  const regra = filesOfProject()
+    .inFolder("features")
+    .matchingPattern("^(?!.*\\.test\\.ts$).*$")
+    .shouldNot().dependOnFiles().matchingPattern("(infrastructure|api)/");
+  expect(await regra.check()).toEqual([]);
+});
+it("não há ciclos de dependência no serviço", async () => {
+  expect(await filesOfProject().inFolder("src").should().beFreeOfCycles().check()).toEqual([]);
+});</pre>
+<p>Resultado atual da suíte: <strong>45 testes</strong> (24 unitários de domínio/casos de uso + 21 de arquitetura) passando em ms-ativos (17), ms-carteira (15), bff-web (6) e fn-simulacao (7).</p>
+
+<h2>8.3 Segurança e privacidade</h2>
+<ul>
+  <li>Única entrada pública é o API Gateway (CORS restrito ao domínio do shell; throttling). Microserviços e Functions recebem chamadas apenas do BFF/Function (rede interna e chave de função <code>x-functions-key</code>).</li>
+  <li>Autenticação e autorização por identidade (RF01, Q06) implementadas no gateway (JWT authorizer) na Entrega 3; o <code>usuarioId</code> passa a vir do token, nunca do cliente.</li>
+  <li>HTTPS em todas as interfaces publicadas; TLS nas conexões com Atlas e Azure SQL.</li>
+  <li>Segredos somente em variáveis de ambiente/App Settings (<code>.env</code> e <code>local.settings.json</code> no <code>.gitignore</code>); repositórios públicos e imagens Docker não contêm credenciais; Key Vault previsto.</li>
+  <li>Validação de entrada com zod em todos os endpoints e Functions antes de aplicar regras ou persistir.</li>
+</ul>
+
+<h2>8.4 Eventos e tratamento de dados externos</h2>
+<ul>
+  <li><strong>Contrato:</strong> <code>investlab.ativos.cotacao-atualizada</code> v1 (JSON Schema em <code>contracts/events</code>); mudanças incompatíveis geram v2 e nova assinatura.</li>
+  <li><strong>Semântica at-least-once:</strong> o produtor persiste antes de publicar; o consumidor (<code>atualizar-precos</code>) é idempotente, então reentregas são seguras.</li>
+  <li><strong>Falhas:</strong> exceção no trigger → <em>abandon</em> → reentrega (até 10×) → dead-letter; alarmes sobre a DLQ.</li>
+  <li><strong>Fontes externas</strong> continuam isoladas no ms-ativos (futuro Timer trigger de coleta); falha não substitui a última base válida.</li>
+</ul>
+
+<h2>8.5 Regras de cálculo financeiro</h2>
+<p>Cálculos ficam concentrados em código puro: <code>Posicao</code> (preço médio ponderado, arredondado em centavos), <code>Carteira</code> (patrimônio e investido) e <code>Simulador</code> (juros compostos mensais com aporte, três cenários ±2 p.p.). Toda execução carrega parâmetros e <code>dataReferencia</code>, permitindo reprodução e auditoria (Q01, Q07).</p>
+
+<h2>8.6 Erros e resiliência</h2>
+<table class="t">
+  <tr><th style="width:30%">Situação</th><th>Comportamento</th></tr>
+  <tr><td>Entrada inválida</td><td>400 <code>ENTRADA_INVALIDA</code> com detalhes do zod.</td></tr>
+  <tr><td>Regra de domínio violada</td><td>422 <code>REGRA_DE_DOMINIO</code> (ex.: data de referência anterior).</td></tr>
+  <tr><td>Recurso inexistente / conflito</td><td>404 <code>NAO_ENCONTRADO</code> / 409 <code>CONFLITO</code>.</td></tr>
+  <tr><td>Upstream indisponível no BFF</td><td>Fonte vira <code>null</code> e <code>fontes.x = "rejected"</code> no agregado; proxies retornam 502 <code>UPSTREAM_INDISPONIVEL</code>; timeout 5 s.</td></tr>
+  <tr><td>Remote do microfrontend fora do ar</td><td><em>Error boundary</em> no shell exibe aviso; demais módulos seguem.</td></tr>
+  <tr><td>Erro interno</td><td>500 <code>ERRO_INTERNO</code> sem vazar detalhes; log estruturado.</td></tr>
+</table>
+
+<h2>8.7 Observabilidade</h2>
+<ul>
+  <li>Logs estruturados em JSON (<code>nivel</code>, <code>operacao</code>, identificadores) em todos os serviços; Application Insights nas Functions e Container Apps.</li>
+  <li>Métricas de duração de simulação (<code>duracaoMs</code>) e de agregação; contagem de mensagens na assinatura e na DLQ.</li>
+  <li><code>GET /health</code> em cada serviço para liveness; <code>dataReferencia</code> exposta como indicador de frescor dos dados.</li>
+</ul>
+
+<h2>8.8 API first e documentação viva</h2>
+<p>Todo serviço expõe <code>/openapi.json</code> e Swagger UI em <code>/docs</code>; o gateway é descrito em OpenAPI (<code>gateway/openapi-gateway.yaml</code>); eventos em JSON Schema. Este documento é gerado de <code>docs/arc42-investlab.html</code> (Mermaid), versionado junto ao código.</p>
+
+<!-- ===================== 9 ===================== -->
+<h1>9. Decisões Arquiteturais</h1>
+<p>As decisões seguem o formato ADR apresentado em aula: título, contexto, decisão, <strong>estado</strong> e consequências (positivas e negativas). As decisões da Entrega 1 são mantidas, substituídas ou reafirmadas explicitamente.</p>
+<table class="t">
+  <tr><th style="width:62px">ID</th><th style="width:22%">Decisão</th><th>Contexto</th><th>Consequências</th><th style="width:11%">Estado</th></tr>
+  <tr><td>ADR-01</td><td>Adotar monólito modular</td><td>Entrega 1: complexidade operacional limitada.</td><td>Menor custo inicial; não atende aos estilos exigidos (microserviços, BFF, EDA).</td><td class="sub-">Substituída por ADR-08</td></tr>
+  <tr><td>ADR-02</td><td>React + Next.js no frontend</td><td>Aplicação web única.</td><td>Boa DX; não permite deploy independente por módulo.</td><td class="sub-">Substituída por ADR-13</td></tr>
+  <tr><td>ADR-03</td><td>Python + FastAPI no backend</td><td>Domínio com estatística e cálculo.</td><td>Facilita motores analíticos; obriga duas linguagens, pois o BFF deve ser Node.</td><td class="sub-">Substituída por ADR-09</td></tr>
+  <tr><td>ADR-04</td><td>PostgreSQL como persistência</td><td>Dados relacionais.</td><td>Modelo consistente; incompatível com Database per Service e com os bancos exigidos.</td><td class="sub-">Substituída por ADR-10</td></tr>
+  <tr><td>ADR-05</td><td>Isolar fontes externas</td><td>B3, CVM, BCB, Tesouro e FGC variam em formato e disponibilidade.</td><td>Mudanças concentradas no ms-ativos (ingestão).</td><td class="ok">Aceita (mantida)</td></tr>
+  <tr><td>ADR-06</td><td>Registrar premissas e data de referência</td><td>Simulações e indicadores precisam ser reproduzíveis.</td><td>Rastreabilidade; <code>dataReferencia</code> em todo contrato e no evento.</td><td class="ok">Aceita (mantida)</td></tr>
+  <tr><td>ADR-07</td><td>Não executar ordens</td><td>Produto delimitado como plataforma analítica.</td><td>Reduz escopo e riscos regulatórios.</td><td class="ok">Aceita (mantida)</td></tr>
+  <tr><td>ADR-08</td><td>Microserviços por capacidade (ativos, carteira) + BFF + API Gateway</td><td>A disciplina exige os estilos; ativos e carteira têm ciclos de mudança e modelos de dados distintos; o frontend precisa de um único ponto de entrada.</td><td>+ Deploy e escala independentes; + entrada única com segurança centralizada; + payload otimizado pela web. − Mais partes para operar e monitorar; − latência extra (gateway + BFF); − testes de integração mais complexos.</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-09</td><td>TypeScript/Node.js 22 em todos os containers</td><td>O BFF deve ser Node (enunciado); Functions em Node já foram praticadas; equipe de 4 pessoas.</td><td>+ Uma linguagem, um toolchain (Vitest, tsarch), tipos compartilháveis por contrato; + menor carga cognitiva. − Perde Pandas/SciPy para estatística avançada (RF05/RF14 exigirão bibliotecas JS ou uma Function Python futura).</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-10</td><td>Database per Service: MongoDB Atlas para ativos, Azure SQL para carteira</td><td>Ativos são documentos consultados por tipo; carteira exige integridade referencial e cálculo transacional; enunciado da Entrega 3 fixa os dois bancos.</td><td>+ Modelo adequado a cada domínio; + isolamento de falhas e esquemas. − Sem join entre bases (referência lógica por ticker); − consistência eventual; − dois drivers e dois backups.</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-11</td><td>EDA com Azure Service Bus (tópico + assinatura) para propagar cotações</td><td>Mudança de cotação precisa refletir nas carteiras sem acoplar ms-ativos a ms-carteira; grupo já operou Service Bus + trigger.</td><td>+ Desacoplamento, reentrega e DLQ; + novos consumidores sem alterar o produtor. − Consistência eventual visível ao usuário; − depuração distribuída; − custo fixo do plano Standard.</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-12</td><td>Serverless (Azure Functions) para simulação e consumo de eventos</td><td>Simulação é CPU sob demanda e picos; consumidor de eventos não justifica container dedicado.</td><td>+ Pagamento por execução, escala automática; + trigger nativo de Service Bus. − Cold start; − limite de tempo de execução; − dependência de provedor.</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-13</td><td>Microfrontend com React + Vite + Module Federation (shell + 2 remotes) no Static Web Apps</td><td>Módulos "Ativos" e "Carteira" evoluem separadamente; atividade da Semana 4 já publicou SWA.</td><td>+ Deploy independente, isolamento de falhas por módulo. − Governança de versões de React compartilhado; − configuração inicial maior; − consistência de UI exige design system (CSS no shell).</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-14</td><td>Clean Architecture + Vertical Slice + testes de arquitetura (tsarch) em cada serviço</td><td>Regras financeiras devem ficar independentes de framework/banco; mudanças chegam por funcionalidade; a estrutura precisa resistir à erosão.</td><td>+ Testabilidade (fakes em memória), mudanças localizadas, regra verificada no CI. − Mais arquivos por funcionalidade (endpoint/handler/teste); − risco de over-engineering em CRUDs simples (mitigado: sem camadas extras de DTO/mapper quando não há variação).</td><td class="ok">Aceita</td></tr>
+  <tr><td>ADR-15</td><td>Azure como nuvem principal; AWS apenas para o API Gateway; Docker Hub para imagens</td><td>Azure for Students cobre Functions, SWA, Service Bus e SQL; o enunciado da Entrega 3 pede AWS Gateway e Docker Hub.</td><td>+ Reuso do que a equipe já praticou; + atende ao enunciado. − Multi-cloud introduz latência entre provedores e duas consoles/IAMs; alternativa documentada: Azure API Management (Consumption).</td><td class="ok">Aceita</td></tr>
+</table>
+
+<!-- ===================== 10 ===================== -->
+<h1>10. Requisitos de Qualidade</h1>
+<p>A árvore de qualidade (estilo ATAM, como apresentado em aula) organiza as metas da seção 1.2 em categorias e cenários mensuráveis. Os valores são critérios de avaliação arquitetural; medições reais serão feitas na Entrega 3 e na avaliação ATAM da Semana 13.</p>
+<h2>10.1 Árvore de qualidade</h2>
+<table class="t">
+  <tr><th style="width:18%">Categoria</th><th style="width:22%">Qualidade (prioridade)</th><th>Descrição</th><th style="width:12%">Cenários</th></tr>
+  <tr><td>Funcionalidade</td><td>Correção (1), Precisão (1)</td><td>Resultados determinísticos; centavos inteiros; fórmulas verificadas por testes.</td><td>Q01, Q02</td></tr>
+  <tr><td>Usabilidade</td><td>Facilidade de uso (2)</td><td>Comparação simples sem treinamento.</td><td>Q03</td></tr>
+  <tr><td>Eficiência</td><td>Desempenho (3)</td><td>Agregação paralela; simulação serverless.</td><td>Q04, Q08</td></tr>
+  <tr><td>Confiabilidade</td><td>Confiabilidade dos dados (4), Disponibilidade (7)</td><td>Última base válida; degradação graciosa; reentrega de eventos.</td><td>Q05, Q09</td></tr>
+  <tr><td>Segurança</td><td>Confidencialidade (5)</td><td>Acesso só pelo gateway autenticado; segredos fora do código.</td><td>Q06</td></tr>
+  <tr><td>Manutenibilidade</td><td>Modificabilidade (6), Testabilidade (6)</td><td>Fatias independentes; regra das dependências verificada.</td><td>Q07, Q10</td></tr>
+</table>
+<h2>10.2 Cenários de qualidade</h2>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th style="width:16%">Qualidade</th><th>Cenário (estímulo → resposta)</th><th style="width:26%">Critério</th></tr>
+  <tr><td>Q01</td><td>Correção</td><td>Mesmas entradas, mesma versão e mesma base de referência em duas execuções da simulação.</td><td>100% de igualdade (teste <code>Simulador.test.ts</code>).</td></tr>
+  <tr><td>Q02</td><td>Precisão</td><td>Aportes com preços diferentes atualizam o preço médio da posição.</td><td>Sem divergência de centavos (teste <code>Carteira.test.ts</code>).</td></tr>
+  <tr><td>Q03</td><td>Usabilidade</td><td>Usuário iniciante cadastra um ativo, cria carteira, registra aporte e simula.</td><td>Até 10 minutos, sem treinamento.</td></tr>
+  <tr><td>Q04</td><td>Desempenho</td><td><code>GET /aggregated-data</code> com os três upstreams saudáveis.</td><td>95% em até 3 s (chamadas em paralelo, timeout 5 s).</td></tr>
+  <tr><td>Q05</td><td>Confiabilidade de dados</td><td>Chega cotação com data de referência anterior à vigente.</td><td>Rejeitada com 422; base válida intacta; nenhum evento publicado (teste <code>atualizar-cotacao</code>).</td></tr>
+  <tr><td>Q06</td><td>Segurança</td><td>Cliente tenta acessar ms-ativos/ms-carteira/Function diretamente pela internet.</td><td>Sem rota pública; apenas o gateway responde; chamadas sem JWT negadas (E3).</td></tr>
+  <tr><td>Q07</td><td>Rastreabilidade</td><td>Usuário revisita uma carteira após várias atualizações de preço.</td><td>Transações e <code>dataReferencia</code> armazenadas; histórico reproduz o preço médio.</td></tr>
+  <tr><td>Q08</td><td>Escalabilidade</td><td>Pico de 100 simulações simultâneas.</td><td>Functions escalam automaticamente; nenhum container precisa ser redimensionado.</td></tr>
+  <tr><td>Q09</td><td>Disponibilidade / resiliência</td><td>ms-carteira indisponível durante entrega de evento; ms-ativos indisponível durante o dashboard.</td><td>Evento reentregue até sucesso ou DLQ (sem perda); dashboard responde com <code>ativos: null</code> (teste <code>aggregated-data</code>).</td></tr>
+  <tr><td>Q10</td><td>Modificabilidade</td><td>Adicionar a funcionalidade "proventos" ao ms-ativos.</td><td>Nova pasta em <code>features</code> + registro no composition root; nenhuma fatia existente alterada; testes de arquitetura continuam verdes.</td></tr>
+</table>
+
+<!-- ===================== 11 ===================== -->
+<h1>11. Riscos e Dívida Técnica</h1>
+<p>Os riscos da Entrega 1 são mantidos onde ainda se aplicam e complementados pelos riscos introduzidos pela arquitetura distribuída. Devem ser revisitados a cada entrega.</p>
+<table class="t">
+  <tr><th style="width:52px">ID</th><th style="width:24%">Risco</th><th style="width:60px">Impacto</th><th style="width:60px">Prob.</th><th>Mitigação</th></tr>
+  <tr><td>R01</td><td>Dependência de fontes externas</td><td>Alta</td><td>Média</td><td>Integrações isoladas no ms-ativos; validação; última base válida preservada por regra de domínio.</td></tr>
+  <tr><td>R02</td><td>Erro em fórmula financeira</td><td>Alta</td><td>Alta</td><td>Código puro em <code>domain</code> com testes unitários de casos conhecidos; centavos inteiros.</td></tr>
+  <tr><td>R03</td><td>Dados desatualizados</td><td>Média</td><td>Alta</td><td><code>dataReferencia</code> em todo contrato e aviso na interface.</td></tr>
+  <tr><td>R04</td><td>Crescimento de escopo</td><td>Alta</td><td>Alta</td><td>Fatias futuras listadas em 11.1; escopo da Entrega 3 fixado pelo enunciado.</td></tr>
+  <tr><td>R05</td><td>Exposição indevida de carteira</td><td>Alta</td><td>Média</td><td>Gateway como única entrada; JWT na Entrega 3; <code>usuarioId</code> do token.</td></tr>
+  <tr><td>R06</td><td>Consistência eventual confundir o usuário (novo)</td><td>Média</td><td>Alta</td><td>Exibir "atualizada em"; consumidor idempotente; monitorar atraso da assinatura.</td></tr>
+  <tr><td>R07</td><td>Cold start de Functions e Container Apps (novo)</td><td>Média</td><td>Alta</td><td>Simulação leve; aceitar latência inicial; opção de instância mínima = 1 se necessário.</td></tr>
+  <tr><td>R08</td><td>Limites e pausas dos planos gratuitos (novo)</td><td>Média</td><td>Alta</td><td>Carga acadêmica; health checks; documentação de limites na seção 7.1.</td></tr>
+  <tr><td>R09</td><td>Multi-cloud (AWS Gateway + Azure) e duplicidade de IAM (novo)</td><td>Média</td><td>Média</td><td>Gateway restrito a proxy; alternativa APIM documentada; credenciais mínimas.</td></tr>
+  <tr><td>R10</td><td>Depuração distribuída (BFF, eventos, Functions) (novo)</td><td>Média</td><td>Média</td><td>Logs JSON com identificadores; Application Insights; DLQ monitorada; teste ponta a ponta local sem nuvem.</td></tr>
+  <tr><td>R11</td><td>Versionamento de React compartilhado entre shell e remotes (novo)</td><td>Baixa</td><td>Média</td><td><code>shared: ["react","react-dom"]</code> com mesma versão fixada no monorepo.</td></tr>
+</table>
+<h2>11.1 Dívida técnica prevista</h2>
+<ul>
+  <li>Autenticação (RF01) e autorização por usuário ainda não implementadas: o <code>usuarioId</code> é informado pelo cliente até o JWT authorizer da Entrega 3.</li>
+  <li>Coleta automática de cotações (RF19) depende de um Timer trigger e dos adaptadores de B3/CVM/BCB/Tesouro/FGC, ainda não codificados.</li>
+  <li>Fatias futuras já posicionadas: proventos e indicadores (ms-ativos), renda fixa/tributação/FGC e backtest (fn-simulacao), perfil e laboratório de estratégias (ms-carteira), Box Plot (mfe-ativos).</li>
+  <li>Repositório SQL faz <em>delete + insert</em> das posições a cada salvamento; adequado ao volume acadêmico, mas deve evoluir para <em>upsert</em> por posição.</li>
+  <li>Sem <em>outbox pattern</em>: entre persistir e publicar pode haver falha; aceitável agora, candidato a melhoria.</li>
+  <li>Observabilidade centralizada (dashboards, alertas de DLQ) e pipeline de CI/CD completo ficam para a Entrega 3.</li>
+</ul>
+
+<!-- ===================== REFERÊNCIAS ===================== -->
+<h1>Referências</h1>
+<p><strong>Materiais produzidos pelo grupo:</strong></p>
+<ul>
+  <li>InvestLab - Documentação de Arquitetura (Entrega 1, 10/09/2026) - Arc42 parcial, C4 níveis 1-4, DER e Canvas.</li>
+  <li>InvestLab_C4.md - modelo C4 (Structurizr DSL) da Entrega 1; MeuSistema.md - Arc42 seções 1-3.</li>
+  <li>Evidências das atividades formativas: Azure Function (GetStatus), Azure Service Bus + ServiceBusQueueTrigger, Static Web Apps + Azure Functions, Cloud Native Landscape.</li>
+  <li>Repositório <code>investlab</code> (monorepo): serviços, microfrontends, contratos, gateway, <code>docs/</code>.</li>
+</ul>
+<p><strong>Material da disciplina (Prof. Manoel Valerio da Silveira Neto, PUCPR, 2026/2):</strong> slides de Documentação para Arquitetura (C4 Model e UML), Arc42, Software Architecture Canvas, Fundamentos de Computação em Nuvem, Serverless/Cloud Native, Microfrontend, Padrões e Estilos Arquiteturais (API Gateway, BFF, Microservices, Database per Service, CQRS), Event-Driven Architecture, Clean Architecture, Vertical Slice, SOLID e Clean Code, Testes de Arquitetura (ArchUnit).</p>
+<p><strong>Referências arquiteturais oficiais:</strong></p>
+<ul>
+  <li>arc42 Documentation - https://docs.arc42.org/ ; arc42 Download - https://arc42.org/download/ ; Software Architecture Canvas - https://canvas.arc42.org/</li>
+  <li>C4 Model - https://c4model.com/ ; Diagrams - https://c4model.com/diagrams ; Notation - https://c4model.com/diagrams/notation</li>
+  <li>Newman, S. Backends For Frontends - https://samnewman.io/patterns/architectural/bff/</li>
+  <li>Martin, R. C. Clean Architecture: A Craftsman's Guide to Software Structure and Design. 2017.</li>
+  <li>Fowler, M. Micro Frontends; Event Sourcing; CQRS - https://martinfowler.com/</li>
+  <li>Microsoft Learn - Azure Functions (Service Bus trigger), Azure Static Web Apps, Azure Service Bus, Azure SQL Database.</li>
+  <li>AWS - API Gateway HTTP APIs (OpenAPI import); MongoDB Atlas; tsarch - https://github.com/ts-arch/ts-arch ; ArchUnitNET - https://github.com/TNG/ArchUnitNET</li>
+</ul>
+<h2>Declaração de uso de Inteligência Artificial Generativa</h2>
+<p>Durante a preparação desta documentação de arquitetura e do código-base que ela descreve, os autores usaram Claude (Anthropic, via Claude Code, outubro de 2026) para estruturar o documento a partir da Entrega 1 e do material da disciplina, gerar o esqueleto do código, os testes e os diagramas em Mermaid. Após usar essa ferramenta, os autores revisaram e editaram o conteúdo conforme necessário e assumem total responsabilidade pelo conteúdo.</p>
+<div class="nota"><strong>Observação sobre o recorte de seções:</strong> o site oficial do arc42 apresenta 12 seções. O enunciado desta atividade solicita 11; por isso, esta entrega segue deliberadamente as seções 1 a 11, sem incluir uma seção 12 (Glossário) como parte da nota. Os termos técnicos estão definidos ao longo do texto e na seção 4.2.</div>
+
+</td></tr></tbody>
+</table>
+<script>
+  // Ajusta cada SVG à área útil de uma página A4 (182 mm x ~235 mm a 96 dpi), mantendo a proporção.
+  function ajustarFiguras() {
+    document.querySelectorAll(".figura svg").forEach((svg) => {
+      const paisagem = svg.closest(".figura").classList.contains("paisagem");
+      const LARGURA_MAX = paisagem ? 1010 : 688, ALTURA_MAX = paisagem ? 640 : 860;
+      const vb = (svg.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+      const vw = vb[2] || svg.getBoundingClientRect().width, vh = vb[3] || svg.getBoundingClientRect().height;
+      if (!vw || !vh) return;
+      let w = Math.min(vw, LARGURA_MAX), h = (w * vh) / vw;
+      if (h > ALTURA_MAX) { h = ALTURA_MAX; w = (h * vw) / vh; }
+      svg.style.maxWidth = "none"; svg.style.width = Math.round(w) + "px"; svg.style.height = Math.round(h) + "px";
+      svg.setAttribute("width", Math.round(w)); svg.setAttribute("height", Math.round(h));
+    });
+    window.__figurasProntas = true;
+  }
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "neutral",
+    securityLevel: "loose",
+    fontFamily: "Segoe UI, Arial, sans-serif",
+    flowchart: { htmlLabels: true, useMaxWidth: true, curve: "basis", nodeSpacing: 30, rankSpacing: 40 },
+    sequence: { useMaxWidth: true, actorFontSize: 14, messageFontSize: 13, noteFontSize: 12, width: 120, height: 40, boxMargin: 6, messageMargin: 28 },
+    er: { useMaxWidth: true, fontSize: 11 },
+    class: { useMaxWidth: true },
+    c4: { useMaxWidth: true, diagramMarginX: 20, diagramMarginY: 20, c4ShapeMargin: 30, c4ShapePadding: 12, width: 230, height: 70 }
+  });
+  mermaid.run({ querySelector: ".mermaid" }).then(ajustarFiguras).catch((e) => { console.error("mermaid", e); ajustarFiguras(); });
+</script>
+</body>
+</html>

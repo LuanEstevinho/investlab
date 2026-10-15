@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "SERVICEBUS_CONNECTION": "<connection string do namespace - NUNCA versionar>",
+    "SERVICEBUS_TOPICO": "investlab-ativos",
+    "SERVICEBUS_ASSINATURA": "carteira",
+    "MS_CARTEIRA_URL": "http://localhost:3002"
+  }
+}

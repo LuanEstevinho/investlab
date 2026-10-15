@@ -1,0 +1,46 @@
+# API Gateway (AWS API Gateway HTTP API) - ponto de entrada único do InvestLab.
+# Importar em: API Gateway > Create API > HTTP API > Import (OpenAPI 3).
+# O gateway roteia TUDO para o BFF (padrão API Gateway + BFF). Microserviços e
+# Functions nunca ficam expostos diretamente à internet.
+openapi: 3.0.3
+info:
+  title: InvestLab Gateway
+  version: 2.0.0
+  description: Entrada única (roteamento, CORS, throttling e, na Entrega 3, autenticação JWT).
+x-amazon-apigateway-cors:
+  allowOrigins:
+    - https://<mfe-shell>.azurestaticapps.net
+  allowMethods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowHeaders: [content-type, authorization]
+paths:
+  /aggregated-data:
+    get:
+      summary: Dashboard agregado (BFF)
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        uri: "${BFF_URL}/aggregated-data"
+        payloadFormatVersion: "1.0"
+      responses: { "200": { description: OK } }
+  /api/{proxy+}:
+    x-amazon-apigateway-any-method:
+      summary: Proxy CRUD (ativos, carteiras, simulações) via BFF
+      parameters:
+        - name: proxy
+          in: path
+          required: true
+          schema: { type: string }
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: ANY
+        uri: "${BFF_URL}/api/{proxy}"
+        payloadFormatVersion: "1.0"
+      responses: { "200": { description: OK } }
+  /health:
+    get:
+      x-amazon-apigateway-integration:
+        type: http_proxy
+        httpMethod: GET
+        uri: "${BFF_URL}/health"
+        payloadFormatVersion: "1.0"
+      responses: { "200": { description: OK } }

@@ -1,0 +1,24 @@
+{
+  "name": "@investlab/fn-simulacao",
+  "version": "2.0.0",
+  "description": "Azure Functions do InvestLab: simulação de patrimônio (HTTP) e consumo do evento cotacao-atualizada (Service Bus)",
+  "type": "module",
+  "main": "dist/functions/*.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "func start",
+    "test": "vitest run",
+    "test:arch": "vitest run test/arquitetura.test.ts"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.7.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsarch": "^5.4.1",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}

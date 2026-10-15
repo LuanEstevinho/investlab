@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://investlab.example/contracts/events/cotacao-atualizada.v1.json",
+  "title": "investlab.ativos.cotacao-atualizada (v1)",
+  "description": "Publicado pelo ms-ativos no tópico Service Bus 'investlab-ativos' sempre que a cotação de um ativo é atualizada. Consumido pela fn-simulacao (assinatura 'carteira') para reavaliar carteiras.",
+  "type": "object",
+  "required": ["tipo", "versao", "ocorridoEm", "dados"],
+  "properties": {
+    "tipo": { "const": "investlab.ativos.cotacao-atualizada" },
+    "versao": { "const": 1 },
+    "ocorridoEm": { "type": "string", "format": "date-time" },
+    "dados": {
+      "type": "object",
+      "required": ["ticker", "tipo", "precoAnteriorCentavos", "precoCentavos", "dataReferencia"],
+      "properties": {
+        "ticker": { "type": "string", "pattern": "^[A-Z0-9]{3,12}$" },
+        "tipo": { "enum": ["FII", "ACAO", "TESOURO", "CDB", "LCI", "LCA"] },
+        "precoAnteriorCentavos": { "type": "integer", "minimum": 0 },
+        "precoCentavos": { "type": "integer", "minimum": 1 },
+        "dataReferencia": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "examples": [
+    {
+      "tipo": "investlab.ativos.cotacao-atualizada",
+      "versao": 1,
+      "ocorridoEm": "2026-10-14T21:00:00.000Z",
+      "dados": { "ticker": "HGLG11", "tipo": "FII", "precoAnteriorCentavos": 16050, "precoCentavos": 16210, "dataReferencia": "2026-10-14T20:00:00.000Z" }
+    }
+  ]
+}

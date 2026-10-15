@@ -1,0 +1,24 @@
+{
+  "name": "investlab",
+  "private": true,
+  "version": "2.0.0",
+  "description": "InvestLab - plataforma de análise, simulação e comparação de investimentos (PJBL PUCPR 2026/2)",
+  "workspaces": [
+    "services/ms-ativos",
+    "services/ms-carteira",
+    "services/bff-web",
+    "services/fn-simulacao",
+    "frontend/mfe-shell",
+    "frontend/mfe-ativos",
+    "frontend/mfe-carteira"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:arch": "npm run test:arch --workspaces --if-present",
+    "lint:types": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

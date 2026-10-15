@@ -1,0 +1,31 @@
+{
+  "name": "@investlab/ms-carteira",
+  "version": "2.0.0",
+  "description": "Microserviço de Carteira Virtual (posições, aportes e patrimônio) - Azure SQL Database",
+  "type": "module",
+  "main": "dist/api/server.js",
+  "scripts": {
+    "dev": "tsx watch src/api/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/api/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:arch": "vitest run test/arquitetura.test.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "mssql": "^11.0.1",
+    "swagger-ui-express": "^5.0.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/mssql": "^9.1.5",
+    "@types/node": "^22.0.0",
+    "@types/swagger-ui-express": "^4.1.8",
+    "tsarch": "^5.4.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  }
+}
